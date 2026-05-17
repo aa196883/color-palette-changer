@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from palette_generation import generate_monochromatic_palette, generate_random_hex_color
+from palette_generation import PALETTE_NAMES, generate_palette, generate_random_hex_color
 from utils import save_palette_png
 
 
@@ -23,16 +23,32 @@ def lightness_step(value: str) -> float:
     return parsed
 
 
+def palette_name(value: str) -> str:
+    normalized = value.lower()
+    if normalized not in PALETTE_NAMES:
+        valid_names = ", ".join(PALETTE_NAMES)
+        raise argparse.ArgumentTypeError(f"unknown palette '{value}'. Expected one of: {valid_names}")
+    return normalized
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate color palettes for image recoloring experiments.",
         epilog=(
             "Examples:\n"
-            "  .venv/bin/python main.py --colors '#336699' --step 0.1 --palette-size 5\n"
-            "  .venv/bin/python main.py -c '#cc5500' -s 0.08 -p 7 -o palettes/warm.png --verbose\n"
-            "  .venv/bin/python main.py --step 0.12 --palette-size 6 --verbose"
+            "  .venv/bin/python main.py --palette monochromatic --colors '#336699' --step 0.1 --palette-size 5\n"
+            "  .venv/bin/python main.py -pal complementary -c '#cc5500' -s 0.08 -p 7 -o palettes/warm.png --verbose\n"
+            "  .venv/bin/python main.py --palette complementary --step 0.12 --palette-size 6 --verbose"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "-pal",
+        "--palette",
+        type=palette_name,
+        default="monochromatic",
+        metavar="NAME",
+        help="Palette type to generate: monochromatic or complementary.",
     )
     parser.add_argument(
         "-c",
@@ -47,7 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--step",
         type=lightness_step,
         default=0.1,
-        help="HLS lightness step between neighboring colors, in the real range [0, 1].",
+        help=(
+            "Step between neighboring colors, in the real range [0, 1]. "
+            "For monochromatic palettes this changes HLS lightness; for complementary palettes this changes HLS hue."
+        ),
     )
     parser.add_argument(
         "-p",
@@ -78,12 +97,14 @@ def main() -> None:
     seed_color = args.color or generate_random_hex_color()
 
     if args.verbose:
+        palette_label = args.palette.capitalize()
         print(
-            "Monochromatic color palette from seed "
+            f"{palette_label} color palette from seed "
             f"{seed_color}, step {args.step}, and size {args.palette_size}"
         )
 
-    palette = generate_monochromatic_palette(
+    palette = generate_palette(
+        palette_name=args.palette,
         seed_color=seed_color,
         step=args.step,
         palette_size=args.palette_size,

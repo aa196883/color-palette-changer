@@ -8,6 +8,8 @@ import re
 
 
 HEX_COLOR_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
+PaletteName = str
+PALETTE_NAMES = ("monochromatic", "complementary")
 
 
 def generate_random_hex_color() -> str:
@@ -50,6 +52,16 @@ def _lightness_values(seed_lightness: float, step: float, palette_size: int) -> 
     return [start + index * step for index in range(palette_size)]
 
 
+def _stepped_values(center: float, step: float, palette_size: int) -> list[float]:
+    if palette_size < 1:
+        raise ValueError("Palette size must be at least 1.")
+    if step < 0 or step > 1:
+        raise ValueError("Step must be an HLS value between 0 and 1.")
+
+    start = center - step * (palette_size - 1) / 2
+    return [(start + index * step) % 1 for index in range(palette_size)]
+
+
 def generate_monochromatic_palette(
     seed_color: str | None = None,
     step: float = 0.1,
@@ -72,3 +84,44 @@ def generate_monochromatic_palette(
         palette.append(_float_rgb_to_hex(colorsys.hls_to_rgb(hue, next_lightness, saturation)))
 
     return palette
+
+
+def generate_complementary_palette(
+    seed_color: str | None = None,
+    step: float = 0.1,
+    palette_size: int = 5,
+) -> list[str]:
+    """Generate a complementary palette as #RRGGBB colors.
+
+    The palette is computed in HLS color space. Lightness and saturation are
+    copied from the seed color; only hue changes around the complementary hue.
+    HLS hue uses real values in the closed interval [0.0, 1.0].
+    """
+    if seed_color is None:
+        seed_color = generate_random_hex_color()
+
+    red, green, blue = hex_to_rgb(seed_color)
+    hue, lightness, saturation = colorsys.rgb_to_hls(red / 255, green / 255, blue / 255)
+    complementary_hue = (hue + 0.5) % 1
+
+    palette = []
+    for next_hue in _stepped_values(complementary_hue, step, palette_size):
+        palette.append(_float_rgb_to_hex(colorsys.hls_to_rgb(next_hue, lightness, saturation)))
+
+    return palette
+
+
+def generate_palette(
+    palette_name: PaletteName,
+    seed_color: str | None = None,
+    step: float = 0.1,
+    palette_size: int = 5,
+) -> list[str]:
+    """Generate a palette by name."""
+    if palette_name == "monochromatic":
+        return generate_monochromatic_palette(seed_color, step, palette_size)
+    if palette_name == "complementary":
+        return generate_complementary_palette(seed_color, step, palette_size)
+
+    valid_names = ", ".join(PALETTE_NAMES)
+    raise ValueError(f"Unknown palette '{palette_name}'. Expected one of: {valid_names}.")
