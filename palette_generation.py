@@ -15,13 +15,18 @@ def generate_random_hex_color() -> str:
     return f"#{random.randint(0, 0xFFFFFF):06x}"
 
 
-def hex_to_rgb(color: str) -> tuple[int, int, int]:
-    """Convert a #RRGGBB color to integer RGB components."""
+def normalize_hex_color(color: str) -> str:
+    """Normalize a hexadecimal color to #rrggbb."""
     match = HEX_COLOR_RE.match(color)
     if match is None:
         raise ValueError("Color must be encoded as hexadecimal #RRGGBB, for example #336699.")
 
-    value = match.group(1)
+    return f"#{match.group(1).lower()}"
+
+
+def hex_to_rgb(color: str) -> tuple[int, int, int]:
+    """Convert a #RRGGBB color to integer RGB components."""
+    value = normalize_hex_color(color)[1:]
     return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
 
 

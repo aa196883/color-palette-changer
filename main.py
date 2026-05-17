@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from palette_generation import generate_palette, generate_random_hex_color
-from utils import save_palette_png
+from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
+from utils import save_palette_outputs
 
 
 def positive_int(value: str) -> int:
@@ -90,14 +90,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    seed_color = args.color or generate_random_hex_color()
-
-    if args.verbose:
-        print(
-            "Color palette from seed "
-            f"{seed_color}, hue step {args.hue_step}, saturation step {args.saturation_step}, "
-            f"brightness step {args.brightness_step}, and size {args.palette_size}"
-        )
+    try:
+        seed_color = normalize_hex_color(args.color) if args.color else generate_random_hex_color()
+    except ValueError as error:
+        parser.error(str(error))
 
     try:
         palette = generate_palette(
@@ -110,10 +106,25 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
 
-    output_path = save_palette_png(palette, args.output)
+    if args.verbose:
+        print(
+            "Color palette from seed "
+            f"{seed_color}, hue step {args.hue_step}, saturation step {args.saturation_step}, "
+            f"brightness step {args.brightness_step}, and size {args.palette_size}"
+        )
+
+    image_path, json_path = save_palette_outputs(
+        palette=palette,
+        seed_color=seed_color,
+        hue_step=args.hue_step,
+        saturation_step=args.saturation_step,
+        brightness_step=args.brightness_step,
+        palette_size=args.palette_size,
+        output_path=args.output,
+    )
 
     if args.verbose:
-        print(f"Color palette generated = {palette}. Saved to {output_path}")
+        print(f"Color palette generated = {palette}. Saved to {image_path} and {json_path}")
 
 
 if __name__ == "__main__":

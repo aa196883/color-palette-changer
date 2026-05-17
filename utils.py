@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 import zlib
 from pathlib import Path
@@ -46,3 +47,53 @@ def save_palette_png(
 
     output.write_bytes(png_data)
     return output
+
+
+def save_palette_json(
+    palette: list[str],
+    seed_color: str,
+    hue_step: float,
+    saturation_step: float,
+    brightness_step: float,
+    palette_size: int,
+    output_path: str | Path = "palettes/palette.json",
+) -> Path:
+    """Save palette colors and generation parameters as JSON."""
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "colors": palette,
+        "seed": seed_color,
+        "step_values": {
+            "hue": hue_step,
+            "saturation": saturation_step,
+            "brightness": brightness_step,
+        },
+        "palette_size": palette_size,
+    }
+    output.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return output
+
+
+def save_palette_outputs(
+    palette: list[str],
+    seed_color: str,
+    hue_step: float,
+    saturation_step: float,
+    brightness_step: float,
+    palette_size: int,
+    output_path: str | Path = "palettes/palette.png",
+) -> tuple[Path, Path]:
+    """Save a palette as both a PNG preview and same-name JSON metadata."""
+    png_path = save_palette_png(palette, output_path)
+    json_path = save_palette_json(
+        palette=palette,
+        seed_color=seed_color,
+        hue_step=hue_step,
+        saturation_step=saturation_step,
+        brightness_step=brightness_step,
+        palette_size=palette_size,
+        output_path=png_path.with_suffix(".json"),
+    )
+    return png_path, json_path
