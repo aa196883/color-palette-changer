@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from palette_generation import PALETTE_NAMES, generate_palette, generate_random_hex_color
+from palette_generation import generate_palette, generate_random_hex_color
 from utils import save_palette_png
 
 
@@ -16,39 +16,24 @@ def positive_int(value: str) -> int:
     return parsed
 
 
-def lightness_step(value: str) -> float:
+def hls_step(value: str) -> float:
     parsed = float(value)
     if parsed < 0 or parsed > 1:
-        raise argparse.ArgumentTypeError("step must be an HLS lightness value between 0 and 1")
+        raise argparse.ArgumentTypeError("step must be an HLS value between 0 and 1")
     return parsed
-
-
-def palette_name(value: str) -> str:
-    normalized = value.lower()
-    if normalized not in PALETTE_NAMES:
-        valid_names = ", ".join(PALETTE_NAMES)
-        raise argparse.ArgumentTypeError(f"unknown palette '{value}'. Expected one of: {valid_names}")
-    return normalized
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate color palettes for image recoloring experiments.",
+        allow_abbrev=False,
         epilog=(
             "Examples:\n"
-            "  .venv/bin/python main.py --palette monochromatic --colors '#336699' --step 0.1 --palette-size 5\n"
-            "  .venv/bin/python main.py -pal hue -c '#cc5500' -s 0.08 -p 7 -o palettes/warm.png --verbose\n"
-            "  .venv/bin/python main.py --palette hue --step 0.12 --palette-size 6 --verbose"
+            "  .venv/bin/python main.py --colors '#336699' --brightness-step 0.1 --palette-size 5\n"
+            "  .venv/bin/python main.py -c '#cc5500' -H 0.08 -S 0.02 -B 0.05 -p 7 -o palettes/warm.png --verbose\n"
+            "  .venv/bin/python main.py --hue-step 0.12 --saturation-step 0.03 --brightness-step 0.04 --palette-size 6 --verbose"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "-pal",
-        "--palette",
-        type=palette_name,
-        default="monochromatic",
-        metavar="NAME",
-        help="Palette type to generate: monochromatic or hue.",
     )
     parser.add_argument(
         "-c",
@@ -59,14 +44,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seed color encoded as hexadecimal #RRGGBB. If omitted, a random seed is used.",
     )
     parser.add_argument(
-        "-s",
-        "--step",
-        type=lightness_step,
-        default=0.1,
-        help=(
-            "Step between neighboring colors, in the real range [0, 1]. "
-            "For monochromatic palettes this changes HLS lightness; for hue palettes this changes HLS hue."
-        ),
+        "-H",
+        "--hue-step",
+        type=hls_step,
+        default=0.0,
+        help="HLS hue step between neighboring colors, in the real range [0, 1]. Hue wraps around the color wheel.",
+    )
+    parser.add_argument(
+        "-S",
+        "--saturation-step",
+        type=hls_step,
+        default=0.0,
+        help="HLS saturation step between neighboring colors, in the real range [0, 1].",
+    )
+    parser.add_argument(
+        "-B",
+        "--brightness-step",
+        type=hls_step,
+        default=0.0,
+        help="Brightness step between neighboring colors, mapped to HLS lightness in the real range [0, 1].",
     )
     parser.add_argument(
         "-p",
@@ -97,18 +93,23 @@ def main() -> None:
     seed_color = args.color or generate_random_hex_color()
 
     if args.verbose:
-        palette_label = args.palette.capitalize()
         print(
-            f"{palette_label} color palette from seed "
-            f"{seed_color}, step {args.step}, and size {args.palette_size}"
+            "Color palette from seed "
+            f"{seed_color}, hue step {args.hue_step}, saturation step {args.saturation_step}, "
+            f"brightness step {args.brightness_step}, and size {args.palette_size}"
         )
 
-    palette = generate_palette(
-        palette_name=args.palette,
-        seed_color=seed_color,
-        step=args.step,
-        palette_size=args.palette_size,
-    )
+    try:
+        palette = generate_palette(
+            seed_color=seed_color,
+            hue_step=args.hue_step,
+            saturation_step=args.saturation_step,
+            brightness_step=args.brightness_step,
+            palette_size=args.palette_size,
+        )
+    except ValueError as error:
+        parser.error(str(error))
+
     output_path = save_palette_png(palette, args.output)
 
     if args.verbose:
