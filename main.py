@@ -1,12 +1,13 @@
-"""Command-line interface for palette generation."""
+"""Command-line interface for palette generation and image mapping."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+from image_processing import map_image_with_palette
 from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
-from utils import save_palette_outputs
+from utils import load_palette_json, save_palette_outputs
 
 
 def positive_int(value: str) -> int:
@@ -25,23 +26,36 @@ def hls_step(value: str) -> float:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate color palettes for image recoloring experiments.",
+        description="Generate palettes and map input images to generated palettes.",
         allow_abbrev=False,
         epilog=(
             "Examples:\n"
-            "  .venv/bin/python main.py --colors '#336699' --brightness-step 0.1 --palette-size 5\n"
-            "  .venv/bin/python main.py -c '#cc5500' -H 0.08 -S 0.02 -B 0.05 -p 7 -o palettes/warm.png --verbose\n"
-            "  .venv/bin/python main.py --hue-step 0.12 --saturation-step 0.03 --brightness-step 0.04 --palette-size 6 --verbose"
+            "  .venv/bin/python main.py --generate-palette --colors '#336699' --brightness-step 0.1 --palette-size 5\n"
+            "  .venv/bin/python main.py --generate-palette -c '#cc5500' -H 0.08 -S 0.02 -B 0.05 -p 7 -o palettes/warm.png --verbose\n"
+            "  .venv/bin/python main.py --map --input-image lenna.png --palette palettes/warm.json --palette-size 7 -o outputs/lenna.png"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--generate-palette",
+        action="store_true",
+        help="Generate a color palette PNG preview and same-name JSON metadata.",
+    )
+    mode.add_argument(
+        "--map",
+        action="store_true",
+        help="Map an input image to a palette JSON using the default posterisation technique.",
+    )
+
     parser.add_argument(
         "-c",
         "--colors",
         "--color",
         dest="color",
         default=None,
-        help="Seed color encoded as hexadecimal #RRGGBB. If omitted, a random seed is used.",
+        help="Seed color encoded as hexadecimal #RRGGBB. If omitted during palette generation, a random seed is used.",
     )
     parser.add_argument(
         "-H",
@@ -68,49 +82,58 @@ def build_parser() -> argparse.ArgumentParser:
         "-p",
         "--palette-size",
         type=positive_int,
-        default=5,
-        help="Number of colors to generate.",
+        default=None,
+        help="Number of colors to generate or expected number of colors in the palette JSON.",
+    )
+    parser.add_argument(
+        "--input-image",
+        type=Path,
+        default=None,
+        help="Input image path used with --map.",
+    )
+    parser.add_argument(
+        "--palette",
+        type=Path,
+        default=None,
+        help="Palette JSON path used with --map.",
     )
     parser.add_argument(
         "-o",
         "--output",
         type=Path,
-        default=Path("palettes/palette.png"),
-        help="Output PNG path.",
+        default=None,
+        help="Output path. Defaults to palettes/palette.png for --generate-palette and outputs/mapped.png for --map.",
     )
     parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Print generation parameters and output details.",
+        help="Print generation or mapping details.",
     )
     return parser
 
 
-def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
-    try:
-        seed_color = normalize_hex_color(args.color) if args.color else generate_random_hex_color()
-    except ValueError as error:
-        parser.error(str(error))
+def generate_palette_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    palette_size = args.palette_size or 5
+    output_path = args.output or Path("palettes/palette.png")
 
     try:
+        seed_color = normalize_hex_color(args.color) if args.color else generate_random_hex_color()
         palette = generate_palette(
             seed_color=seed_color,
             hue_step=args.hue_step,
             saturation_step=args.saturation_step,
             brightness_step=args.brightness_step,
-            palette_size=args.palette_size,
+            palette_size=palette_size,
         )
-    except ValueError as error:
+    except (OSError, ValueError) as error:
         parser.error(str(error))
 
     if args.verbose:
         print(
             "Color palette from seed "
             f"{seed_color}, hue step {args.hue_step}, saturation step {args.saturation_step}, "
-            f"brightness step {args.brightness_step}, and size {args.palette_size}"
+            f"brightness step {args.brightness_step}, and size {palette_size}"
         )
 
     image_path, json_path = save_palette_outputs(
@@ -119,12 +142,62 @@ def main() -> None:
         hue_step=args.hue_step,
         saturation_step=args.saturation_step,
         brightness_step=args.brightness_step,
-        palette_size=args.palette_size,
-        output_path=args.output,
+        palette_size=palette_size,
+        output_path=output_path,
     )
 
     if args.verbose:
         print(f"Color palette generated = {palette}. Saved to {image_path} and {json_path}")
+
+
+def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.input_image is None:
+        parser.error("--map requires --input-image")
+    if not args.input_image.is_file():
+        parser.error(f"input image missing: {args.input_image}")
+    if args.palette is None:
+        parser.error("--map requires --palette")
+    if not args.palette.is_file():
+        parser.error(f"palette missing: {args.palette}")
+    if args.palette_size is None:
+        parser.error("--map requires --palette-size")
+
+    try:
+        palette_data = load_palette_json(args.palette)
+        colors = palette_data["colors"]
+        json_palette_size = palette_data["palette_size"]
+        if json_palette_size != args.palette_size:
+            raise ValueError(
+                f"Palette JSON declares size {json_palette_size}, but palette size is {args.palette_size}."
+            )
+        if len(colors) != args.palette_size:
+            raise ValueError(f"Palette contains {len(colors)} colors, but palette size is {args.palette_size}.")
+
+        output_path = args.output or Path("outputs/mapped.png")
+        mapped_path = map_image_with_palette(
+            input_image=args.input_image,
+            palette=colors,
+            palette_size=args.palette_size,
+            output_path=output_path,
+        )
+    except ValueError as error:
+        parser.error(str(error))
+
+    if args.verbose:
+        print(
+            f"Mapped {args.input_image} with palette {args.palette}, "
+            f"palette size {args.palette_size}. Saved to {mapped_path}"
+        )
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.generate_palette:
+        generate_palette_command(args, parser)
+    elif args.map:
+        map_command(args, parser)
 
 
 if __name__ == "__main__":
