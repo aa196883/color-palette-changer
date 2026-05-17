@@ -37,8 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  .venv/bin/python main.py --palette monochromatic --colors '#336699' --step 0.1 --palette-size 5\n"
-            "  .venv/bin/python main.py -pal complementary -c '#cc5500' -s 0.08 -p 7 -o palettes/warm.png --verbose\n"
-            "  .venv/bin/python main.py --palette complementary --step 0.12 --palette-size 6 --verbose"
+            "  .venv/bin/python main.py -pal hue -c '#cc5500' -s 0.08 -p 7 -o palettes/warm.png --verbose\n"
+            "  .venv/bin/python main.py --palette hue --step 0.12 --palette-size 6 --verbose"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=palette_name,
         default="monochromatic",
         metavar="NAME",
-        help="Palette type to generate: monochromatic or complementary.",
+        help="Palette type to generate: monochromatic or hue.",
     )
     parser.add_argument(
         "-c",
@@ -65,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.1,
         help=(
             "Step between neighboring colors, in the real range [0, 1]. "
-            "For monochromatic palettes this changes HLS lightness; for complementary palettes this changes HLS hue."
+            "For monochromatic palettes this changes HLS lightness; for hue palettes this changes HLS hue."
         ),
     )
     parser.add_argument(

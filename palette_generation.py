@@ -9,7 +9,7 @@ import re
 
 HEX_COLOR_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
 PaletteName = str
-PALETTE_NAMES = ("monochromatic", "complementary")
+PALETTE_NAMES = ("monochromatic", "hue")
 
 
 def generate_random_hex_color() -> str:
@@ -86,15 +86,15 @@ def generate_monochromatic_palette(
     return palette
 
 
-def generate_complementary_palette(
+def generate_hue_palette(
     seed_color: str | None = None,
     step: float = 0.1,
     palette_size: int = 5,
 ) -> list[str]:
-    """Generate a complementary palette as #RRGGBB colors.
+    """Generate a hue-based palette as #RRGGBB colors.
 
     The palette is computed in HLS color space. Lightness and saturation are
-    copied from the seed color; only hue changes around the complementary hue.
+    copied from the seed color; only hue changes around the seed hue.
     HLS hue uses real values in the closed interval [0.0, 1.0].
     """
     if seed_color is None:
@@ -102,10 +102,9 @@ def generate_complementary_palette(
 
     red, green, blue = hex_to_rgb(seed_color)
     hue, lightness, saturation = colorsys.rgb_to_hls(red / 255, green / 255, blue / 255)
-    complementary_hue = (hue + 0.5) % 1
 
     palette = []
-    for next_hue in _stepped_values(complementary_hue, step, palette_size):
+    for next_hue in _stepped_values(hue, step, palette_size):
         palette.append(_float_rgb_to_hex(colorsys.hls_to_rgb(next_hue, lightness, saturation)))
 
     return palette
@@ -120,8 +119,8 @@ def generate_palette(
     """Generate a palette by name."""
     if palette_name == "monochromatic":
         return generate_monochromatic_palette(seed_color, step, palette_size)
-    if palette_name == "complementary":
-        return generate_complementary_palette(seed_color, step, palette_size)
+    if palette_name == "hue":
+        return generate_hue_palette(seed_color, step, palette_size)
 
     valid_names = ", ".join(PALETTE_NAMES)
     raise ValueError(f"Unknown palette '{palette_name}'. Expected one of: {valid_names}.")
