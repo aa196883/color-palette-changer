@@ -36,6 +36,39 @@ class DesaturationImageMapping(ImageMapping):
         return np.rint((grey_values / 255) * max_index).astype(np.uint8)
 
 
+class HueImageMapping(ImageMapping):
+    """Quantize pixels by hue in HSV/HSL-like color space."""
+
+    def map_image(self, image: Image.Image, palette_size: int) -> np.ndarray:
+        if palette_size < 1:
+            raise ValueError("Palette size must be at least 1.")
+
+        hue_values = np.asarray(image.convert("HSV"), dtype=np.float32)[:, :, 0]
+
+        if palette_size == 1:
+            return np.zeros(hue_values.shape, dtype=np.uint8)
+
+        return (np.floor((hue_values / 256) * palette_size + 0.5) % palette_size).astype(np.uint8)
+
+
+def image_map_to_grayscale(image_map: np.ndarray) -> Image.Image:
+    """Convert a 2D integer image map to an 8-bit grayscale visualization."""
+    if image_map.ndim != 2:
+        raise ValueError("Image map must be a 2D array.")
+    if image_map.size == 0:
+        raise ValueError("Image map must not be empty.")
+    if not np.issubdtype(image_map.dtype, np.integer):
+        raise TypeError("Image map must contain integer values.")
+
+    min_value = image_map.min()
+    max_value = image_map.max()
+    if min_value == max_value:
+        return Image.fromarray(np.zeros(image_map.shape, dtype=np.uint8), mode="L")
+
+    scaled = ((image_map.astype(np.float32) - min_value) / (max_value - min_value) * 255).astype(np.uint8)
+    return Image.fromarray(scaled, mode="L")
+
+
 def apply_palette(image_map: np.ndarray, palette: list[str]) -> Image.Image:
     """Apply encoded palette colors to a 2D image map."""
     if image_map.ndim != 2:
@@ -70,3 +103,11 @@ def map_image_with_palette(
     output.parent.mkdir(parents=True, exist_ok=True)
     output_image.save(output)
     return output
+
+# Test code for mapper
+if __name__ == "__main__":
+    image_input = "lenna.png"
+    mapping = DesaturationImageMapping()
+    image_map = mapping.map_image(Image.open(image_input), palette_size=64)
+    visualization = image_map_to_grayscale(image_map)
+    visualization.save("lenna_desaturation_map.png")
