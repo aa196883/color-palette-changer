@@ -14,6 +14,8 @@ from palette_generation import hex_to_rgb
 class ImageMapping(ABC):
     """Abstract interface for mapping image pixels to palette indices."""
 
+    name: str
+
     @abstractmethod
     def map_image(self, image: Image.Image, palette_size: int) -> np.ndarray:
         """Return a 2D integer array mapping each pixel to a palette index."""
@@ -21,6 +23,8 @@ class ImageMapping(ABC):
 
 class DesaturationImageMapping(ImageMapping):
     """Desaturate an image and quantize grayscale values to palette indices."""
+
+    name = "grayscaled"
 
     def map_image(self, image: Image.Image, palette_size: int) -> np.ndarray:
         if palette_size < 1:
@@ -39,6 +43,8 @@ class DesaturationImageMapping(ImageMapping):
 class HueImageMapping(ImageMapping):
     """Quantize pixels by hue in HSV/HSL-like color space."""
 
+    name = "hue"
+
     def map_image(self, image: Image.Image, palette_size: int) -> np.ndarray:
         if palette_size < 1:
             raise ValueError("Palette size must be at least 1.")
@@ -53,6 +59,8 @@ class HueImageMapping(ImageMapping):
 
 class HSLClustersImageMapping(ImageMapping):
     """Cluster pixels in HSL color space with deterministic k-means."""
+
+    name = "hsl-clusters"
 
     def __init__(self, max_iterations: int = 20) -> None:
         if max_iterations < 1:
@@ -169,6 +177,31 @@ def _image_map_dtype(palette_size: int) -> np.dtype:
         return np.dtype(np.uint8)
 
     return np.dtype(np.int32)
+
+
+IMAGE_MAPPING_CLASSES = {
+    DesaturationImageMapping.name: DesaturationImageMapping,
+    HueImageMapping.name: HueImageMapping,
+    HSLClustersImageMapping.name: HSLClustersImageMapping,
+}
+
+
+DEFAULT_IMAGE_MAPPING_NAME = DesaturationImageMapping.name
+
+
+def image_mapping_names() -> tuple[str, ...]:
+    """Return CLI-stable image mapping names."""
+    return tuple(IMAGE_MAPPING_CLASSES)
+
+
+def create_image_mapping(name: str) -> ImageMapping:
+    """Create an image mapping by CLI-stable name."""
+    try:
+        mapping_class = IMAGE_MAPPING_CLASSES[name]
+    except KeyError as error:
+        raise ValueError(f"Unknown image mapping: {name}") from error
+
+    return mapping_class()
 
 
 def apply_palette(image_map: np.ndarray, palette: list[str]) -> Image.Image:

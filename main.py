@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from image_processing import map_image_with_palette
+from image_processing import DEFAULT_IMAGE_MAPPING_NAME, create_image_mapping, image_mapping_names, map_image_with_palette
 from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
 from utils import load_palette_json, save_palette_outputs
 
@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  .venv/bin/python main.py --generate-palette --colors '#336699' --brightness-step 0.1 --palette-size 5\n"
             "  .venv/bin/python main.py --generate-palette -c '#cc5500' -H 0.08 -S 0.02 -B 0.05 -p 7 -o palettes/warm.png --verbose\n"
-            "  .venv/bin/python main.py --map --input-image lenna.png --palette palettes/warm.json --palette-size 7 -o outputs/lenna.png"
+            "  .venv/bin/python main.py --map --input-image lenna.png --palette palettes/warm.json --image-mapping=hue -o outputs/lenna.png"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--palette-size",
         type=positive_int,
         default=None,
-        help="Number of colors to generate or expected number of colors in the palette JSON.",
+        help="Number of colors to generate. Defaults to 5.",
     )
     parser.add_argument(
         "--input-image",
@@ -96,6 +96,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Palette JSON path used with --map.",
+    )
+    parser.add_argument(
+        "--image-mapping",
+        choices=image_mapping_names(),
+        default=DEFAULT_IMAGE_MAPPING_NAME,
+        help=(
+            "Image mapper used with --map. "
+            f"Defaults to {DEFAULT_IMAGE_MAPPING_NAME}."
+        ),
     )
     parser.add_argument(
         "-o",
@@ -159,26 +168,20 @@ def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         parser.error("--map requires --palette")
     if not args.palette.is_file():
         parser.error(f"palette missing: {args.palette}")
-    if args.palette_size is None:
-        parser.error("--map requires --palette-size")
-
     try:
         palette_data = load_palette_json(args.palette)
         colors = palette_data["colors"]
-        json_palette_size = palette_data["palette_size"]
-        if json_palette_size != args.palette_size:
-            raise ValueError(
-                f"Palette JSON declares size {json_palette_size}, but palette size is {args.palette_size}."
-            )
-        if len(colors) != args.palette_size:
-            raise ValueError(f"Palette contains {len(colors)} colors, but palette size is {args.palette_size}.")
+        palette_size = palette_data["palette_size"]
+        if len(colors) != palette_size:
+            raise ValueError(f"Palette contains {len(colors)} colors, but palette size is {palette_size}.")
 
         output_path = args.output or Path("outputs/mapped.png")
         mapped_path = map_image_with_palette(
             input_image=args.input_image,
             palette=colors,
-            palette_size=args.palette_size,
+            palette_size=palette_size,
             output_path=output_path,
+            image_mapping=create_image_mapping(args.image_mapping),
         )
     except ValueError as error:
         parser.error(str(error))
@@ -186,7 +189,7 @@ def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     if args.verbose:
         print(
             f"Mapped {args.input_image} with palette {args.palette}, "
-            f"palette size {args.palette_size}. Saved to {mapped_path}"
+            f"palette size {palette_size}, image mapping {args.image_mapping}. Saved to {mapped_path}"
         )
 
 
