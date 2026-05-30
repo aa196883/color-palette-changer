@@ -83,7 +83,11 @@ class HSLClustersImageMapping(ImageMapping):
             return np.zeros((height, width), dtype=np.uint8)
 
         labels = _k_means_labels(hsl_points, cluster_count, self.max_iterations)
-        return labels.reshape(height, width).astype(_image_map_dtype(palette_size))
+
+        # apply majority filter to smooth out small clusters
+        labels = majority_filter(labels.reshape(height, width), kernel_size=3)
+        # labels = majority_filter(labels.reshape(height, width), kernel_size=3)
+        return labels.astype(_image_map_dtype(palette_size))
 
 
 def image_map_to_grayscale(image_map: np.ndarray) -> Image.Image:
@@ -179,6 +183,26 @@ def _image_map_dtype(palette_size: int) -> np.dtype:
     return np.dtype(np.int32)
 
 
+# majority filter
+def majority_filter(image_map: np.ndarray, kernel_size: int) -> np.ndarray:
+    """Apply a majority filter to a 2D image map."""
+    if image_map.ndim != 2:
+        raise ValueError("Image map must be a 2D array.")
+    if kernel_size < 2:
+        raise ValueError("Kernel size must be at least 2.")
+
+    pad_size = kernel_size // 2
+    padded_map = np.pad(image_map, pad_size, mode="edge")
+    filtered_map = np.zeros_like(image_map)
+
+    for i in range(image_map.shape[0]):
+        for j in range(image_map.shape[1]):
+            kernel = padded_map[i : i + kernel_size, j : j + kernel_size]
+            values, counts = np.unique(kernel, return_counts=True)
+            filtered_map[i, j] = values[np.argmax(counts)]
+
+    return filtered_map
+
 IMAGE_MAPPING_CLASSES = {
     DesaturationImageMapping.name: DesaturationImageMapping,
     HueImageMapping.name: HueImageMapping,
@@ -242,7 +266,14 @@ def map_image_with_palette(
 # Test code for mapper
 if __name__ == "__main__":
     image_input = "lenna.png"
+    # test hsl clusters mapping
     mapping = HSLClustersImageMapping()
-    image_map = mapping.map_image(Image.open(image_input), palette_size=64)
+    image_map = mapping.map_image(Image.open(image_input), palette_size=8)
     visualization = image_map_to_grayscale(image_map)
     visualization.save("lenna_hsl_clusters.png")
+
+    # # test gray mapping
+    # mapping = DesaturationImageMapping()
+    # image_map = mapping.map_image(Image.open(image_input), palette_size=8)
+    # visualization = image_map_to_grayscale(image_map)
+    # visualization.save("lenna_desaturation.png")
