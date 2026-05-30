@@ -102,7 +102,9 @@ def test_oklab_clusters_image_mapping_clusters_pixels_by_oklab_similarity() -> N
         ]
     )
 
-    image_map = OKlabClustersImageMapping().map_image(image, palette_data(2))
+    palette = Pallette(palette_size=2, colors=("#00ff00", "#ff0000"))
+
+    image_map = OKlabClustersImageMapping().map_image(image, palette)
 
     assert image_map.shape == (2, 4)
     assert image_map.dtype == np.uint8
@@ -112,6 +114,8 @@ def test_oklab_clusters_image_mapping_clusters_pixels_by_oklab_similarity() -> N
     assert image_map[0, 2] == image_map[1, 2]
     assert image_map[0, 3] == image_map[1, 3]
     assert image_map[0, 0] != image_map[0, 2]
+    assert image_map[0, 0] == 1
+    assert image_map[0, 2] == 0
 
 
 def test_hsl_palette_distance_image_mapping_uses_nearest_palette_color() -> None:

@@ -116,12 +116,12 @@ class OKlabClustersImageMapping(ImageMapping):
         if cluster_count == 1:
             return np.zeros((height, width), dtype=np.uint8)
 
-        labels = _k_means_labels(oklab_points, cluster_count, self.max_iterations)
+        labels, centers = _k_means(oklab_points, cluster_count, self.max_iterations)
+        palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
+        palette_oklab = _rgb_to_oklab(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
+        labels = _map_cluster_labels_to_palette_indices(labels, centers, palette_oklab)
 
-        # apply majority filter to smooth out small clusters
-        for _ in range(3):
-            labels = _majority_filter_if_supported(labels.reshape(height, width), kernel_size=3)
-        return labels.astype(_image_map_dtype(palette.palette_size))
+        return labels.reshape(height, width).astype(_image_map_dtype(palette.palette_size))
 
 
 class HSLPaletteDistanceImageMapping(ImageMapping):
@@ -237,6 +237,11 @@ def _rgb_to_oklab(rgb_values: np.ndarray) -> np.ndarray:
 
 
 def _k_means_labels(points: np.ndarray, cluster_count: int, max_iterations: int) -> np.ndarray:
+    labels, _ = _k_means(points, cluster_count, max_iterations)
+    return labels
+
+
+def _k_means(points: np.ndarray, cluster_count: int, max_iterations: int) -> tuple[np.ndarray, np.ndarray]:
     centers = _initial_cluster_centers(points, cluster_count)
     labels: np.ndarray | None = None
 
@@ -259,7 +264,18 @@ def _k_means_labels(points: np.ndarray, cluster_count: int, max_iterations: int)
         labels = new_labels
         centers = new_centers
 
-    return np.asarray(labels, dtype=np.int32)
+    return np.asarray(labels, dtype=np.int32), centers
+
+
+def _map_cluster_labels_to_palette_indices(
+    labels: np.ndarray,
+    centers: np.ndarray,
+    palette_points: np.ndarray,
+) -> np.ndarray:
+    distances = np.sum((centers[:, np.newaxis, :] - palette_points[np.newaxis, :, :]) ** 2, axis=2)
+    cluster_to_palette = np.argmin(distances, axis=1)
+
+    return cluster_to_palette[labels]
 
 
 def _initial_cluster_centers(points: np.ndarray, cluster_count: int) -> np.ndarray:
