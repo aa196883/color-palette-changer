@@ -26,8 +26,17 @@ def test_hue_image_mapping_quantizes_similar_hues_together() -> None:
     assert image_map.shape == (1, 4)
     assert image_map[0, 0] == image_map[0, 1]
     assert image_map[0, 0] == 0
-    assert image_map[0, 2] == 2
-    assert image_map[0, 3] == 4
+    assert image_map[0, 2] == 3
+    assert image_map[0, 3] == 5
+
+
+def test_hue_image_mapping_clamps_max_normalized_hue_to_last_palette_index() -> None:
+    image = Image.new("RGB", (2, 1))
+    image.putdata([(255, 0, 0), (0, 0, 255)])
+
+    image_map = HueImageMapping().map_image(image, palette_data(2))
+
+    np.testing.assert_array_equal(image_map, np.array([[0, 1]], dtype=np.uint8))
 
 
 def test_pallette_rejects_empty_palette_size() -> None:

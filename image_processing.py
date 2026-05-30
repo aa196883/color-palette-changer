@@ -49,7 +49,19 @@ class HueImageMapping(ImageMapping):
         if palette.palette_size == 1:
             return np.zeros(hue_values.shape, dtype=np.uint8)
 
-        return (np.floor((hue_values / 256) * palette.palette_size + 0.5) % palette.palette_size).astype(np.uint8)
+        min_hue = hue_values.min()
+        max_hue = hue_values.max()
+        if min_hue == max_hue:
+            return np.zeros(hue_values.shape, dtype=np.uint8)
+
+        normalized_hues = (hue_values - min_hue) / (max_hue - min_hue)
+        image_map = np.floor(normalized_hues * palette.palette_size).astype(_image_map_dtype(palette.palette_size))
+        image_map[image_map == palette.palette_size] = palette.palette_size - 1
+
+        # apply majority filter to smooth out small hue clusters
+        for _ in range(1):
+            image_map = majority_filter(image_map, kernel_size=3)
+        return image_map
 
 
 class HSLClustersImageMapping(ImageMapping):
@@ -264,3 +276,9 @@ if __name__ == "__main__":
     image_map = mapping.map_image(Image.open(image_input), test_palette)
     visualization = image_map_to_grayscale(image_map)
     visualization.save("lenna_desaturation.png")
+
+    # test hue mapping
+    mapping = HueImageMapping()
+    image_map = mapping.map_image(Image.open(image_input), test_palette)
+    visualization = image_map_to_grayscale(image_map)
+    visualization.save("lenna_hue.png")
