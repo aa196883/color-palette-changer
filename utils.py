@@ -7,6 +7,7 @@ import struct
 import zlib
 from pathlib import Path
 
+from palette import Pallette
 from palette_generation import hex_to_rgb
 
 
@@ -99,21 +100,10 @@ def save_palette_outputs(
     return png_path, json_path
 
 
-def load_palette_json(path: str | Path) -> dict[str, object]:
+def load_palette_json(path: str | Path) -> Pallette:
     """Load palette JSON metadata from disk."""
     source = Path(path)
     with source.open(encoding="utf-8") as file:
         data = json.load(file)
 
-    if not isinstance(data, dict):
-        raise ValueError("Palette JSON must contain an object.")
-
-    colors = data.get("colors")
-    if not isinstance(colors, list) or not all(isinstance(color, str) for color in colors):
-        raise ValueError("Palette JSON must contain a colors array of encoded color strings.")
-
-    palette_size = data.get("palette_size")
-    if not isinstance(palette_size, int):
-        raise ValueError("Palette JSON must contain an integer palette_size.")
-
-    return data
+    return Pallette.from_json_data(data)

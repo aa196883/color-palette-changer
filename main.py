@@ -177,16 +177,12 @@ def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         parser.error(f"palette missing: {args.palette}")
     try:
         palette_data = load_palette_json(args.palette)
-        colors = palette_data["colors"]
-        palette_size = palette_data["palette_size"]
-        if len(colors) != palette_size:
-            raise ValueError(f"Palette contains {len(colors)} colors, but palette size is {palette_size}.")
+        palette_size = palette_data.palette_size
 
         output_path = args.output or default_mapped_output_path(args.input_image, args.palette, args.image_mapping)
         mapped_path = map_image_with_palette(
             input_image=args.input_image,
-            palette=colors,
-            palette_size=palette_size,
+            palette=palette_data,
             output_path=output_path,
             image_mapping=create_image_mapping(args.image_mapping),
         )

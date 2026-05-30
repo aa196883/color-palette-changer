@@ -6,6 +6,8 @@ from PIL import Image
 
 from image_processing import HueImageMapping
 from main import build_parser, default_mapped_output_path, generate_palette_command, map_command
+from palette import Pallette
+from utils import load_palette_json
 
 
 def test_generate_palette_cli_inputs() -> None:
@@ -102,6 +104,18 @@ def test_generate_palette_command_writes_png_and_json(tmp_path) -> None:
     assert metadata["seed"] == "#336699"
     assert metadata["palette_size"] == 5
     assert len(metadata["colors"]) == 5
+
+
+def test_load_palette_json_returns_pallette(tmp_path) -> None:
+    palette_path = tmp_path / "palette.json"
+    palette_path.write_text(
+        json.dumps({"colors": ["#000000", "#ffffff"], "palette_size": 2}),
+        encoding="utf-8",
+    )
+
+    palette = load_palette_json(palette_path)
+
+    assert palette == Pallette(palette_size=2, colors=("#000000", "#ffffff"))
 
 
 def test_map_requires_existing_palette(tmp_path) -> None:
@@ -226,3 +240,8 @@ def test_map_command_uses_selected_image_mapping(tmp_path, monkeypatch) -> None:
     map_command(args, parser)
 
     assert isinstance(captured["image_mapping"], HueImageMapping)
+    assert captured["palette"] == Pallette(
+        palette_size=3,
+        colors=("#000000", "#808080", "#ffffff"),
+    )
+    assert "palette_size" not in captured

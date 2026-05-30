@@ -3,6 +3,11 @@ import pytest
 from PIL import Image
 
 from image_processing import DesaturationImageMapping, HSLClustersImageMapping, HueImageMapping, image_map_to_grayscale
+from palette import Pallette
+
+
+def palette_data(palette_size: int) -> Pallette:
+    return Pallette(palette_size=palette_size, colors=("#000000",) * palette_size)
 
 
 def test_hue_image_mapping_quantizes_similar_hues_together() -> None:
@@ -16,7 +21,7 @@ def test_hue_image_mapping_quantizes_similar_hues_together() -> None:
         ]
     )
 
-    image_map = HueImageMapping().map_image(image, palette_size=6)
+    image_map = HueImageMapping().map_image(image, palette_data(6))
 
     assert image_map.shape == (1, 4)
     assert image_map[0, 0] == image_map[0, 1]
@@ -25,16 +30,16 @@ def test_hue_image_mapping_quantizes_similar_hues_together() -> None:
     assert image_map[0, 3] == 4
 
 
-def test_hue_image_mapping_rejects_empty_palette_size() -> None:
+def test_pallette_rejects_empty_palette_size() -> None:
     with pytest.raises(ValueError):
-        HueImageMapping().map_image(Image.new("RGB", (1, 1)), palette_size=0)
+        Pallette(palette_size=0, colors=())
 
 
 def test_desaturation_image_mapping_still_returns_2d_indices() -> None:
     image = Image.new("RGB", (2, 1))
     image.putdata([(0, 0, 0), (255, 255, 255)])
 
-    image_map = DesaturationImageMapping().map_image(image, palette_size=3)
+    image_map = DesaturationImageMapping().map_image(image, palette_data(3))
 
     np.testing.assert_array_equal(image_map, np.array([[0, 2]], dtype=np.uint8))
 
@@ -54,7 +59,7 @@ def test_hsl_clusters_image_mapping_clusters_pixels_by_hsl_similarity() -> None:
         ]
     )
 
-    image_map = HSLClustersImageMapping().map_image(image, palette_size=2)
+    image_map = HSLClustersImageMapping().map_image(image, palette_data(2))
 
     assert image_map.shape == (2, 4)
     assert image_map.dtype == np.uint8
@@ -66,9 +71,9 @@ def test_hsl_clusters_image_mapping_clusters_pixels_by_hsl_similarity() -> None:
     assert image_map[0, 0] != image_map[0, 2]
 
 
-def test_hsl_clusters_image_mapping_rejects_empty_palette_size() -> None:
+def test_pallette_rejects_size_that_does_not_match_colors() -> None:
     with pytest.raises(ValueError):
-        HSLClustersImageMapping().map_image(Image.new("RGB", (1, 1)), palette_size=0)
+        Pallette(palette_size=2, colors=("#000000",))
 
 
 def test_image_map_to_grayscale_scales_low_to_dark_and_high_to_light() -> None:
