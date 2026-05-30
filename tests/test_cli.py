@@ -1,10 +1,11 @@
 import json
+from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from image_processing import HueImageMapping
-from main import build_parser, generate_palette_command, map_command
+from main import build_parser, default_mapped_output_path, generate_palette_command, map_command
 
 
 def test_generate_palette_cli_inputs() -> None:
@@ -62,6 +63,17 @@ def test_help_lists_image_mapping_option(capsys) -> None:
     assert "grayscaled" in help_text
     assert "hue" in help_text
     assert "hsl-clusters" in help_text
+    assert "outputs/{input_image}--{palette}--{image_mapping}.png" in help_text
+
+
+def test_default_mapped_output_path_uses_input_palette_and_mapping_stems() -> None:
+    output_path = default_mapped_output_path(
+        input_image=Path("images/lenna.png"),
+        palette=Path("palettes/warm.json"),
+        image_mapping="hsl-clusters",
+    )
+
+    assert output_path == Path("outputs/lenna--warm--hsl-clusters.png")
 
 
 def test_generate_palette_command_writes_png_and_json(tmp_path) -> None:

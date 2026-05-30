@@ -111,7 +111,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="Output path. Defaults to palettes/palette.png for --generate-palette and outputs/mapped.png for --map.",
+        help=(
+            "Output path. Defaults to palettes/palette.png for --generate-palette and "
+            "outputs/{input_image}--{palette}--{image_mapping}.png for --map."
+        ),
     )
     parser.add_argument(
         "-v",
@@ -159,6 +162,10 @@ def generate_palette_command(args: argparse.Namespace, parser: argparse.Argument
         print(f"Color palette generated = {palette}. Saved to {image_path} and {json_path}")
 
 
+def default_mapped_output_path(input_image: Path, palette: Path, image_mapping: str) -> Path:
+    return Path("outputs") / f"{input_image.stem}--{palette.stem}--{image_mapping}.png"
+
+
 def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.input_image is None:
         parser.error("--map requires --input-image")
@@ -175,7 +182,7 @@ def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         if len(colors) != palette_size:
             raise ValueError(f"Palette contains {len(colors)} colors, but palette size is {palette_size}.")
 
-        output_path = args.output or Path("outputs/mapped.png")
+        output_path = args.output or default_mapped_output_path(args.input_image, args.palette, args.image_mapping)
         mapped_path = map_image_with_palette(
             input_image=args.input_image,
             palette=colors,
