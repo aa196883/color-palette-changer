@@ -38,6 +38,30 @@ def test_generate_palette_cli_inputs() -> None:
     assert args.image_mapping == "grayscaled"
 
 
+def test_generate_palette_cli_accepts_oklab_inputs() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--generate-palette",
+            "--Oklab",
+            "-L",
+            "0.0",
+            "-a",
+            "-0.1",
+            "-b",
+            "0.05",
+            "-p",
+            "7",
+        ]
+    )
+
+    assert args.color_space == "OKlab"
+    assert args.lightness_step == 0.0
+    assert args.green_red_step == -0.1
+    assert args.blue_yellow_step == 0.05
+    assert args.palette_size == 7
+
+
 def test_map_image_mapping_cli_inputs() -> None:
     parser = build_parser()
     args = parser.parse_args(
@@ -62,6 +86,8 @@ def test_help_lists_image_mapping_option(capsys) -> None:
 
     help_text = capsys.readouterr().out
     assert "--image-mapping" in help_text
+    assert "--HSL" in help_text
+    assert "--Oklab" in help_text
     assert "grayscaled" in help_text
     assert "hue" in help_text
     assert "hsl-clusters" in help_text
@@ -104,7 +130,38 @@ def test_generate_palette_command_writes_png_and_json(tmp_path) -> None:
     assert json_path.is_file()
     metadata = json.loads(json_path.read_text(encoding="utf-8"))
     assert metadata["seed"] == "#336699"
+    assert metadata["color_space"] == "HSL"
     assert metadata["palette_size"] == 5
+    assert len(metadata["colors"]) == 5
+
+
+def test_generate_oklab_palette_command_writes_signed_steps_to_json(tmp_path) -> None:
+    parser = build_parser()
+    output = tmp_path / "palette.png"
+    args = parser.parse_args(
+        [
+            "--generate-palette",
+            "--Oklab",
+            "-c",
+            "#336699",
+            "-L",
+            "0.0",
+            "-a",
+            "-0.1",
+            "-b",
+            "0.05",
+            "-p",
+            "5",
+            "-o",
+            str(output),
+        ]
+    )
+
+    generate_palette_command(args, parser)
+
+    metadata = json.loads((tmp_path / "palette.json").read_text(encoding="utf-8"))
+    assert metadata["color_space"] == "OKlab"
+    assert metadata["step_values"] == {"lightness": 0.0, "a": -0.1, "b": 0.05}
     assert len(metadata["colors"]) == 5
 
 
