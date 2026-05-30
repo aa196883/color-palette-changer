@@ -2,7 +2,13 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from image_processing import DesaturationImageMapping, HSLClustersImageMapping, HueImageMapping, image_map_to_grayscale
+from image_processing import (
+    DesaturationImageMapping,
+    HSLClustersImageMapping,
+    HSLPaletteDistanceImageMapping,
+    HueImageMapping,
+    image_map_to_grayscale,
+)
 from palette import Pallette
 
 
@@ -78,6 +84,26 @@ def test_hsl_clusters_image_mapping_clusters_pixels_by_hsl_similarity() -> None:
     assert image_map[0, 2] == image_map[1, 2]
     assert image_map[0, 3] == image_map[1, 3]
     assert image_map[0, 0] != image_map[0, 2]
+
+
+def test_hsl_palette_distance_image_mapping_uses_nearest_palette_color() -> None:
+    image = Image.new("RGB", (4, 1))
+    image.putdata(
+        [
+            (250, 5, 5),
+            (5, 250, 5),
+            (5, 5, 250),
+            (128, 128, 128),
+        ]
+    )
+    palette = Pallette(
+        palette_size=4,
+        colors=("#ff0000", "#00ff00", "#0000ff", "#808080"),
+    )
+
+    image_map = HSLPaletteDistanceImageMapping().map_image(image, palette)
+
+    np.testing.assert_array_equal(image_map, np.array([[0, 1, 2, 3]], dtype=np.uint8))
 
 
 def test_pallette_rejects_size_that_does_not_match_colors() -> None:

@@ -60,7 +60,7 @@ class HueImageMapping(ImageMapping):
 
         # apply majority filter to smooth out small hue clusters
         for _ in range(1):
-            image_map = majority_filter(image_map, kernel_size=3)
+            image_map = _majority_filter_if_supported(image_map, kernel_size=3)
         return image_map
 
 
@@ -90,8 +90,30 @@ class HSLClustersImageMapping(ImageMapping):
 
         # apply majority filter to smooth out small clusters
         for _ in range(3):
-            labels = majority_filter(labels.reshape(height, width), kernel_size=3)
+            labels = _majority_filter_if_supported(labels.reshape(height, width), kernel_size=3)
         return labels.astype(_image_map_dtype(palette.palette_size))
+
+
+class HSLPaletteDistanceImageMapping(ImageMapping):
+    """Map each pixel to the nearest palette color in HSL color space."""
+
+    name = "hsl-distance"
+
+    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
+        rgb_values = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
+        height, width = rgb_values.shape[:2]
+        if palette.palette_size == 1:
+            return np.zeros((height, width), dtype=np.uint8)
+
+        pixel_hsl = _rgb_to_hsl(rgb_values).reshape(-1, 3)
+        palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
+        palette_hsl = _rgb_to_hsl(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
+
+        hsl_delta = np.abs(pixel_hsl[:, np.newaxis, :] - palette_hsl[np.newaxis, :, :])
+        hsl_delta[:, :, 0] = np.minimum(hsl_delta[:, :, 0], 1 - hsl_delta[:, :, 0])
+        distances = np.sum(hsl_delta**2, axis=2)
+
+        return np.argmin(distances, axis=1).reshape(height, width).astype(_image_map_dtype(palette.palette_size))
 
 
 def image_map_to_grayscale(image_map: np.ndarray) -> Image.Image:
@@ -207,10 +229,18 @@ def majority_filter(image_map: np.ndarray, kernel_size: int) -> np.ndarray:
 
     return filtered_map
 
+
+def _majority_filter_if_supported(image_map: np.ndarray, kernel_size: int) -> np.ndarray:
+    if min(image_map.shape) < kernel_size:
+        return image_map
+
+    return majority_filter(image_map, kernel_size)
+
 IMAGE_MAPPING_CLASSES = {
     DesaturationImageMapping.name: DesaturationImageMapping,
     HueImageMapping.name: HueImageMapping,
     HSLClustersImageMapping.name: HSLClustersImageMapping,
+    HSLPaletteDistanceImageMapping.name: HSLPaletteDistanceImageMapping,
 }
 
 
@@ -264,21 +294,42 @@ def map_image_with_palette(
 # Test code for mapper
 if __name__ == "__main__":
     image_input = "lenna.png"
-    test_palette = Pallette(palette_size=8, colors=("#000000",) * 8)
-    # test hsl clusters mapping
-    mapping = HSLClustersImageMapping()
-    image_map = mapping.map_image(Image.open(image_input), test_palette)
-    visualization = image_map_to_grayscale(image_map)
-    visualization.save("lenna_hsl_clusters.png")
 
-    # test gray mapping
-    mapping = DesaturationImageMapping()
-    image_map = mapping.map_image(Image.open(image_input), test_palette)
-    visualization = image_map_to_grayscale(image_map)
-    visualization.save("lenna_desaturation.png")
+    # test palette with 8 grays
+    test_palette = Pallette(
+        palette_size=8,
+        colors=(
+            "#000000",
+            "#202020",
+            "#404040",
+            "#606060",
+            "#808080",
+            "#A0A0A0",
+            "#C0C0C0",
+            "#E0E0E0",
+        ),
+    )
+
+    # # test hsl clusters mapping
+    # mapping = HSLClustersImageMapping()
+    # image_map = mapping.map_image(Image.open(image_input), test_palette)
+    # visualization = image_map_to_grayscale(image_map)
+    # visualization.save("lenna_hsl_clusters.png")
+
+    # # test gray mapping
+    # mapping = DesaturationImageMapping()
+    # image_map = mapping.map_image(Image.open(image_input), test_palette)
+    # visualization = image_map_to_grayscale(image_map)
+    # visualization.save("lenna_desaturation.png")
 
     # test hue mapping
     mapping = HueImageMapping()
     image_map = mapping.map_image(Image.open(image_input), test_palette)
     visualization = image_map_to_grayscale(image_map)
     visualization.save("lenna_hue.png")
+
+    # # test hsl distance mapping
+    # mapping = HSLPaletteDistanceImageMapping()
+    # image_map = mapping.map_image(Image.open(image_input), test_palette)
+    # visualization = image_map_to_grayscale(image_map)
+    # visualization.save("lenna_hsl_distance.png")
