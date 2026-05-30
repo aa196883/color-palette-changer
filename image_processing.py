@@ -94,6 +94,36 @@ class HSLClustersImageMapping(ImageMapping):
         return labels.astype(_image_map_dtype(palette.palette_size))
 
 
+class OKlabClustersImageMapping(ImageMapping):
+    """Cluster pixels in OKlab color space with deterministic k-means."""
+
+    name = "oklab-clusters"
+
+    def __init__(self, max_iterations: int = 20) -> None:
+        if max_iterations < 1:
+            raise ValueError("Max iterations must be at least 1.")
+
+        self.max_iterations = max_iterations
+
+    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
+        rgb_values = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
+        height, width = rgb_values.shape[:2]
+        if palette.palette_size == 1:
+            return np.zeros((height, width), dtype=np.uint8)
+
+        oklab_points = _rgb_to_oklab(rgb_values).reshape(-1, 3)
+        cluster_count = min(palette.palette_size, len(np.unique(oklab_points, axis=0)))
+        if cluster_count == 1:
+            return np.zeros((height, width), dtype=np.uint8)
+
+        labels = _k_means_labels(oklab_points, cluster_count, self.max_iterations)
+
+        # apply majority filter to smooth out small clusters
+        for _ in range(3):
+            labels = _majority_filter_if_supported(labels.reshape(height, width), kernel_size=3)
+        return labels.astype(_image_map_dtype(palette.palette_size))
+
+
 class HSLPaletteDistanceImageMapping(ImageMapping):
     """Map each pixel to the nearest palette color in HSL color space."""
 
@@ -165,6 +195,45 @@ def _rgb_to_hsl(rgb_values: np.ndarray) -> np.ndarray:
     hue /= 6
 
     return np.stack((hue, saturation, lightness), axis=2)
+
+
+def _rgb_to_oklab(rgb_values: np.ndarray) -> np.ndarray:
+    """Convert sRGB values in the [0, 1] range to OKlab points."""
+    linear_rgb = np.where(
+        rgb_values <= 0.04045,
+        rgb_values / 12.92,
+        ((rgb_values + 0.055) / 1.055) ** 2.4,
+    )
+
+    red = linear_rgb[:, :, 0]
+    green = linear_rgb[:, :, 1]
+    blue = linear_rgb[:, :, 2]
+
+    long_cone = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue
+    medium_cone = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue
+    short_cone = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue
+
+    long_cone_root = np.cbrt(long_cone)
+    medium_cone_root = np.cbrt(medium_cone)
+    short_cone_root = np.cbrt(short_cone)
+
+    lightness = (
+        0.2104542553 * long_cone_root
+        + 0.7936177850 * medium_cone_root
+        - 0.0040720468 * short_cone_root
+    )
+    green_red = (
+        1.9779984951 * long_cone_root
+        - 2.4285922050 * medium_cone_root
+        + 0.4505937099 * short_cone_root
+    )
+    blue_yellow = (
+        0.0259040371 * long_cone_root
+        + 0.7827717662 * medium_cone_root
+        - 0.8086757660 * short_cone_root
+    )
+
+    return np.stack((lightness, green_red, blue_yellow), axis=2)
 
 
 def _k_means_labels(points: np.ndarray, cluster_count: int, max_iterations: int) -> np.ndarray:
@@ -240,6 +309,7 @@ IMAGE_MAPPING_CLASSES = {
     DesaturationImageMapping.name: DesaturationImageMapping,
     HueImageMapping.name: HueImageMapping,
     HSLClustersImageMapping.name: HSLClustersImageMapping,
+    OKlabClustersImageMapping.name: OKlabClustersImageMapping,
     HSLPaletteDistanceImageMapping.name: HSLPaletteDistanceImageMapping,
 }
 
@@ -322,14 +392,20 @@ if __name__ == "__main__":
     # visualization = image_map_to_grayscale(image_map)
     # visualization.save("lenna_desaturation.png")
 
-    # test hue mapping
-    mapping = HueImageMapping()
-    image_map = mapping.map_image(Image.open(image_input), test_palette)
-    visualization = image_map_to_grayscale(image_map)
-    visualization.save("lenna_hue.png")
+    # # test hue mapping
+    # mapping = HueImageMapping()
+    # image_map = mapping.map_image(Image.open(image_input), test_palette)
+    # visualization = image_map_to_grayscale(image_map)
+    # visualization.save("lenna_hue.png")
 
     # # test hsl distance mapping
     # mapping = HSLPaletteDistanceImageMapping()
     # image_map = mapping.map_image(Image.open(image_input), test_palette)
     # visualization = image_map_to_grayscale(image_map)
     # visualization.save("lenna_hsl_distance.png")
+
+    # test oklab clusters mapping
+    mapping = OKlabClustersImageMapping()
+    image_map = mapping.map_image(Image.open(image_input), test_palette)
+    visualization = image_map_to_grayscale(image_map)
+    visualization.save("lenna_oklab_clusters.png")

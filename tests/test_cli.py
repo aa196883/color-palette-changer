@@ -65,6 +65,7 @@ def test_help_lists_image_mapping_option(capsys) -> None:
     assert "grayscaled" in help_text
     assert "hue" in help_text
     assert "hsl-clusters" in help_text
+    assert "oklab-clusters" in help_text
     assert "hsl-distance" in help_text
     assert "outputs/{input_image}--{palette}--{image_mapping}.png" in help_text
 

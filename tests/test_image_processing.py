@@ -7,6 +7,7 @@ from image_processing import (
     HSLClustersImageMapping,
     HSLPaletteDistanceImageMapping,
     HueImageMapping,
+    OKlabClustersImageMapping,
     image_map_to_grayscale,
 )
 from palette import Pallette
@@ -75,6 +76,33 @@ def test_hsl_clusters_image_mapping_clusters_pixels_by_hsl_similarity() -> None:
     )
 
     image_map = HSLClustersImageMapping().map_image(image, palette_data(2))
+
+    assert image_map.shape == (2, 4)
+    assert image_map.dtype == np.uint8
+    assert len(np.unique(image_map)) == 2
+    assert image_map[0, 0] == image_map[1, 0]
+    assert image_map[0, 1] == image_map[1, 1]
+    assert image_map[0, 2] == image_map[1, 2]
+    assert image_map[0, 3] == image_map[1, 3]
+    assert image_map[0, 0] != image_map[0, 2]
+
+
+def test_oklab_clusters_image_mapping_clusters_pixels_by_oklab_similarity() -> None:
+    image = Image.new("RGB", (4, 2))
+    image.putdata(
+        [
+            (255, 0, 0),
+            (245, 10, 10),
+            (0, 255, 0),
+            (10, 245, 10),
+            (255, 0, 0),
+            (245, 10, 10),
+            (0, 255, 0),
+            (10, 245, 10),
+        ]
+    )
+
+    image_map = OKlabClustersImageMapping().map_image(image, palette_data(2))
 
     assert image_map.shape == (2, 4)
     assert image_map.dtype == np.uint8
