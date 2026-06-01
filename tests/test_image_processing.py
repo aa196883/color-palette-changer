@@ -8,6 +8,7 @@ from image_processing import (
     _map_cluster_labels_to_palette_indices,
     _map_grayscale_labels_to_palette_indices,
     image_map_to_grayscale,
+    map_image_with_palette,
 )
 from palette import Pallette
 
@@ -144,3 +145,157 @@ def test_image_map_to_grayscale_scales_low_to_dark_and_high_to_light() -> None:
 def test_image_map_to_grayscale_rejects_non_2d_arrays() -> None:
     with pytest.raises(ValueError):
         image_map_to_grayscale(np.array([0, 1, 2], dtype=np.uint8))
+
+
+def test_map_image_with_palette_uses_cached_mapping(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "input.png"
+    palette_path = tmp_path / "palette.json"
+    output_path = tmp_path / "mapped.png"
+    Image.new("RGB", (2, 1), (255, 255, 255)).save(image_path)
+    palette_path.write_text('{"colors":["#000000","#ffffff"],"palette_size":2}\n', encoding="utf-8")
+    cached_map = np.array([[0, 1]], dtype=np.uint8)
+    captured = {}
+
+    class FailingMapping(DesaturationImageMapping):
+        name = "grayscaled"
+
+        def map_image(self, image, palette):
+            raise AssertionError("mapping should be loaded from cache")
+
+    def fake_load_image_mapping(cache_key):
+        captured["cache_key"] = cache_key
+        return cached_map
+
+    def fake_save_image_mapping(cache_key, image_map):
+        raise AssertionError("cached mapping should not be regenerated")
+
+    monkeypatch.setattr("image_processing.load_image_mapping", fake_load_image_mapping)
+    monkeypatch.setattr("image_processing.save_image_mapping", fake_save_image_mapping)
+
+    map_image_with_palette(
+        input_image=image_path,
+        palette=Pallette(palette_size=2, colors=("#000000", "#ffffff")),
+        output_path=output_path,
+        image_mapping=FailingMapping(),
+        palette_json_path=palette_path,
+    )
+
+    assert output_path.is_file()
+    assert captured["cache_key"] == "input.png--grayscaled--2"
+
+
+def test_map_image_with_palette_saves_generated_mapping_on_cache_miss(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "input.png"
+    palette_path = tmp_path / "palette.json"
+    output_path = tmp_path / "mapped.png"
+    image = Image.new("RGB", (2, 1))
+    image.putdata([(0, 0, 0), (255, 255, 255)])
+    image.save(image_path)
+    palette_path.write_text('{"colors":["#000000","#ffffff"],"palette_size":2}\n', encoding="utf-8")
+    saved = {}
+
+    def fake_load_image_mapping(cache_key):
+        return None
+
+    def fake_save_image_mapping(cache_key, image_map):
+        saved["cache_key"] = cache_key
+        saved["image_map"] = image_map.copy()
+
+    monkeypatch.setattr("image_processing.load_image_mapping", fake_load_image_mapping)
+    monkeypatch.setattr("image_processing.save_image_mapping", fake_save_image_mapping)
+
+    map_image_with_palette(
+        input_image=image_path,
+        palette=Pallette(palette_size=2, colors=("#000000", "#ffffff")),
+        output_path=output_path,
+        image_mapping=DesaturationImageMapping(),
+        palette_json_path=palette_path,
+    )
+
+    assert output_path.is_file()
+    assert saved["cache_key"] == "input.png--grayscaled--2"
+    np.testing.assert_array_equal(saved["image_map"], np.array([[0, 1]], dtype=np.uint8))
+
+
+def test_cached_grayscale_intermediate_is_reused_for_same_palette_size(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "input.png"
+    first_palette_path = tmp_path / "first.json"
+    second_palette_path = tmp_path / "second.json"
+    first_output_path = tmp_path / "first.png"
+    second_output_path = tmp_path / "second.png"
+    image = Image.new("RGB", (2, 1))
+    image.putdata([(0, 0, 0), (255, 255, 255)])
+    image.save(image_path)
+    first_palette_path.write_text('{"colors":["#000000","#ffffff"],"palette_size":2}\n', encoding="utf-8")
+    second_palette_path.write_text('{"colors":["#ff0000","#00ff00"],"palette_size":2}\n', encoding="utf-8")
+    cache = {}
+
+    def fake_load_image_mapping(cache_key):
+        return cache.get(cache_key)
+
+    def fake_save_image_mapping(cache_key, image_map):
+        cache[cache_key] = image_map.copy()
+
+    monkeypatch.setattr("image_processing.load_image_mapping", fake_load_image_mapping)
+    monkeypatch.setattr("image_processing.save_image_mapping", fake_save_image_mapping)
+
+    map_image_with_palette(
+        input_image=image_path,
+        palette=Pallette(palette_size=2, colors=("#000000", "#ffffff")),
+        output_path=first_output_path,
+        image_mapping=DesaturationImageMapping(),
+        palette_json_path=first_palette_path,
+    )
+    map_image_with_palette(
+        input_image=image_path,
+        palette=Pallette(palette_size=2, colors=("#ff0000", "#00ff00")),
+        output_path=second_output_path,
+        image_mapping=DesaturationImageMapping(),
+        palette_json_path=second_palette_path,
+    )
+
+    assert list(cache) == ["input.png--grayscaled--2"]
+    np.testing.assert_array_equal(np.asarray(Image.open(first_output_path)), np.array([[[0, 0, 0], [255, 255, 255]]]))
+    np.testing.assert_array_equal(np.asarray(Image.open(second_output_path)), np.array([[[255, 0, 0], [0, 255, 0]]]))
+
+
+def test_cached_oklab_cluster_intermediate_is_reused_for_same_palette_size(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "input.png"
+    first_palette_path = tmp_path / "first.json"
+    second_palette_path = tmp_path / "second.json"
+    first_output_path = tmp_path / "first.png"
+    second_output_path = tmp_path / "second.png"
+    image = Image.new("RGB", (2, 1))
+    image.putdata([(255, 0, 0), (0, 255, 0)])
+    image.save(image_path)
+    first_palette_path.write_text('{"colors":["#00ff00","#ff0000"],"palette_size":2}\n', encoding="utf-8")
+    second_palette_path.write_text('{"colors":["#ff0000","#00ff00"],"palette_size":2}\n', encoding="utf-8")
+    cache = {}
+
+    def fake_load_image_mapping(cache_key):
+        return cache.get(cache_key)
+
+    def fake_save_image_mapping(cache_key, image_map):
+        cache[cache_key] = image_map.copy()
+
+    monkeypatch.setattr("image_processing.load_image_mapping", fake_load_image_mapping)
+    monkeypatch.setattr("image_processing.save_image_mapping", fake_save_image_mapping)
+
+    map_image_with_palette(
+        input_image=image_path,
+        palette=Pallette(palette_size=2, colors=("#00ff00", "#ff0000")),
+        output_path=first_output_path,
+        image_mapping=OKlabClustersImageMapping(),
+        palette_json_path=first_palette_path,
+    )
+    map_image_with_palette(
+        input_image=image_path,
+        palette=Pallette(palette_size=2, colors=("#ff0000", "#00ff00")),
+        output_path=second_output_path,
+        image_mapping=OKlabClustersImageMapping(),
+        palette_json_path=second_palette_path,
+    )
+
+    assert list(cache) == ["input.png--oklab-clusters--2"]
+    np.testing.assert_array_equal(np.asarray(Image.open(first_output_path)), np.array([[[255, 0, 0], [0, 255, 0]]]))
+    np.testing.assert_array_equal(np.asarray(Image.open(second_output_path)), np.array([[[255, 0, 0], [0, 255, 0]]]))

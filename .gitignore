@@ -3,3 +3,4 @@ palettes/
 __pycache__/
 .pytest_cache/
 outputs/
+.cache/

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from image_mapping_cache import image_mapping_cache_key, load_image_mapping, save_image_mapping
 from oklab import rgb_array_to_oklab
 from palette import Pallette
 from palette_generation import hex_to_rgb
@@ -18,9 +19,18 @@ class ImageMapping(ABC):
 
     name: str
 
-    @abstractmethod
     def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
         """Return a 2D integer array mapping each pixel to a palette index."""
+        intermediate = self.create_intermediate_map(image, palette.palette_size)
+        return self.apply_palette_to_intermediate(intermediate, palette)
+
+    @abstractmethod
+    def create_intermediate_map(self, image: Image.Image, palette_size: int) -> np.ndarray:
+        """Return a cacheable image mapping intermediate dependent only on palette size."""
+
+    @abstractmethod
+    def apply_palette_to_intermediate(self, intermediate_map: np.ndarray, palette: Pallette) -> np.ndarray:
+        """Map a cached intermediate to palette indices."""
 
 
 class DesaturationImageMapping(ImageMapping):
@@ -31,15 +41,17 @@ class DesaturationImageMapping(ImageMapping):
     def __init__(self, rng: np.random.Generator | None = None) -> None:
         self.rng = rng
 
-    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
+    def create_intermediate_map(self, image: Image.Image, palette_size: int) -> np.ndarray:
         grayscale = image.convert("L")
         grey_values = np.asarray(grayscale, dtype=np.float32)
 
-        if palette.palette_size == 1:
+        if palette_size == 1:
             return np.zeros(grey_values.shape, dtype=np.uint8)
 
-        max_index = palette.palette_size - 1
-        grayscale_labels = np.rint((grey_values / 255) * max_index).astype(_image_map_dtype(palette.palette_size))
+        max_index = palette_size - 1
+        return np.rint((grey_values / 255) * max_index).astype(_image_map_dtype(palette_size))
+
+    def apply_palette_to_intermediate(self, intermediate_map: np.ndarray, palette: Pallette) -> np.ndarray:
         palette_oklab = _palette_oklab_points(palette)
 
         label_to_palette = _map_grayscale_labels_to_palette_indices(
@@ -48,7 +60,7 @@ class DesaturationImageMapping(ImageMapping):
             rng=self.rng,
         )
 
-        return label_to_palette[grayscale_labels].astype(_image_map_dtype(palette.palette_size))
+        return label_to_palette[intermediate_map].astype(_image_map_dtype(palette.palette_size))
 
 
 class OKlabClustersImageMapping(ImageMapping):
@@ -62,18 +74,35 @@ class OKlabClustersImageMapping(ImageMapping):
 
         self.max_iterations = max_iterations
 
-    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
+    def create_intermediate_map(self, image: Image.Image, palette_size: int) -> np.ndarray:
         rgb_values = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
         height, width = rgb_values.shape[:2]
+        if palette_size == 1:
+            return np.zeros((height, width, 4), dtype=np.float32)
+
+        oklab_points = rgb_array_to_oklab(rgb_values).reshape(-1, 3)
+        cluster_count = min(palette_size, len(np.unique(oklab_points, axis=0)))
+        if cluster_count == 1:
+            intermediate_map = np.zeros((height * width, 4), dtype=np.float32)
+            intermediate_map[:, 1:] = oklab_points[0]
+            return intermediate_map.reshape(height, width, 4)
+
+        labels, centers = _k_means(oklab_points, cluster_count, self.max_iterations)
+        intermediate_map = np.empty((height * width, 4), dtype=np.float32)
+        intermediate_map[:, 0] = labels
+        intermediate_map[:, 1:] = centers[labels]
+        return intermediate_map.reshape(height, width, 4)
+
+    def apply_palette_to_intermediate(self, intermediate_map: np.ndarray, palette: Pallette) -> np.ndarray:
+        if intermediate_map.ndim != 3 or intermediate_map.shape[2] != 4:
+            raise ValueError("OKlab cluster intermediate map must have shape (height, width, 4).")
+
+        height, width = intermediate_map.shape[:2]
+        labels = intermediate_map[:, :, 0].astype(np.int32).reshape(-1)
         if palette.palette_size == 1:
             return np.zeros((height, width), dtype=np.uint8)
 
-        oklab_points = rgb_array_to_oklab(rgb_values).reshape(-1, 3)
-        cluster_count = min(palette.palette_size, len(np.unique(oklab_points, axis=0)))
-        if cluster_count == 1:
-            return np.zeros((height, width), dtype=np.uint8)
-
-        labels, centers = _k_means(oklab_points, cluster_count, self.max_iterations)
+        centers = _cluster_centers_from_intermediate(intermediate_map)
         palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
         palette_oklab = rgb_array_to_oklab(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
         labels = _map_cluster_labels_to_palette_indices(labels, centers, palette_oklab)
@@ -145,6 +174,21 @@ def _map_cluster_labels_to_palette_indices(
         cluster_to_palette[center_index] = remaining_palette_indices.pop(remaining_index)
 
     return cluster_to_palette[labels]
+
+
+def _cluster_centers_from_intermediate(intermediate_map: np.ndarray) -> np.ndarray:
+    labels = intermediate_map[:, :, 0].astype(np.int32).reshape(-1)
+    pixel_centers = intermediate_map[:, :, 1:].reshape(-1, 3)
+    cluster_count = int(labels.max(initial=0)) + 1
+    centers = np.zeros((cluster_count, 3), dtype=np.float32)
+
+    for label in range(cluster_count):
+        matches = np.flatnonzero(labels == label)
+        if len(matches) == 0:
+            raise ValueError("OKlab cluster intermediate map contains a missing cluster label.")
+        centers[label] = pixel_centers[matches[0]]
+
+    return centers
 
 
 def _map_grayscale_labels_to_palette_indices(
@@ -268,12 +312,28 @@ def map_image_with_palette(
     palette: Pallette,
     output_path: str | Path,
     image_mapping: ImageMapping | None = None,
+    palette_json_path: str | Path | None = None,
 ) -> Path:
     """Map an input image to a palette and save the recolored result."""
     mapping = image_mapping or DesaturationImageMapping()
-    with Image.open(input_image) as image:
-        image_map = mapping.map_image(image, palette)
+    cache_key = None
+    if palette_json_path is not None:
+        cache_key = image_mapping_cache_key(
+            input_image=input_image,
+            mapping_name=mapping.name,
+            palette_size=palette.palette_size,
+        )
+        intermediate_map = load_image_mapping(cache_key)
+    else:
+        intermediate_map = None
 
+    if intermediate_map is None:
+        with Image.open(input_image) as image:
+            intermediate_map = mapping.create_intermediate_map(image, palette.palette_size)
+        if cache_key is not None:
+            save_image_mapping(cache_key, intermediate_map)
+
+    image_map = mapping.apply_palette_to_intermediate(intermediate_map, palette)
     output_image = apply_palette(image_map, palette)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)

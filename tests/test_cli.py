@@ -274,4 +274,5 @@ def test_map_command_uses_selected_image_mapping(tmp_path, monkeypatch) -> None:
         palette_size=3,
         colors=("#000000", "#808080", "#ffffff"),
     )
+    assert captured["palette_json_path"] == palette_path
     assert "palette_size" not in captured

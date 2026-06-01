@@ -177,6 +177,7 @@ def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
             palette=palette_data,
             output_path=output_path,
             image_mapping=create_image_mapping(args.image_mapping),
+            palette_json_path=args.palette,
         )
     except ValueError as error:
         parser.error(str(error))
