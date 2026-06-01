@@ -1,0 +1,28 @@
+{
+  "colors": [
+    "#e500ff",
+    "#cb00ff",
+    "#b800ff",
+    "#af00ff",
+    "#b282ff",
+    "#bea3ff",
+    "#d1b1ff",
+    "#e7b4d9",
+    "#ffae79",
+    "#ff9f00",
+    "#ff8800",
+    "#ff6200",
+    "#ff0000",
+    "#ff0000",
+    "#ff0000",
+    "#ff0000"
+  ],
+  "seed": "#f3b2ac",
+  "color_space": "OKlab",
+  "step_values": {
+    "lightness": -0.01,
+    "a": -0.0,
+    "b": 0.125
+  },
+  "palette_size": 16
+}
