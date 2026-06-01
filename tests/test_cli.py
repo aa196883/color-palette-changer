@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from image_processing import HueImageMapping
+from image_processing import OKlabClustersImageMapping
 from main import build_parser, default_mapped_output_path, generate_palette_command, map_command
 from palette import Pallette
 from utils import load_palette_json
@@ -17,33 +17,6 @@ def test_generate_palette_cli_inputs() -> None:
             "--generate-palette",
             "-c",
             "#336699",
-            "-H",
-            "0.08",
-            "-S",
-            "0.02",
-            "-B",
-            "0.05",
-            "-p",
-            "7",
-        ]
-    )
-
-    assert args.generate_palette is True
-    assert args.map is False
-    assert args.color == "#336699"
-    assert args.hue_step == 0.08
-    assert args.saturation_step == 0.02
-    assert args.brightness_step == 0.05
-    assert args.palette_size == 7
-    assert args.image_mapping == "grayscaled"
-
-
-def test_generate_palette_cli_accepts_oklab_inputs() -> None:
-    parser = build_parser()
-    args = parser.parse_args(
-        [
-            "--generate-palette",
-            "--Oklab",
             "-L",
             "0.0",
             "-a",
@@ -55,11 +28,14 @@ def test_generate_palette_cli_accepts_oklab_inputs() -> None:
         ]
     )
 
-    assert args.color_space == "OKlab"
+    assert args.generate_palette is True
+    assert args.map is False
+    assert args.color == "#336699"
     assert args.lightness_step == 0.0
     assert args.green_red_step == -0.1
     assert args.blue_yellow_step == 0.05
     assert args.palette_size == 7
+    assert args.image_mapping == "grayscaled"
 
 
 def test_map_image_mapping_cli_inputs() -> None:
@@ -71,11 +47,11 @@ def test_map_image_mapping_cli_inputs() -> None:
             "input.png",
             "--palette",
             "palette.json",
-            "--image-mapping=hue",
+            "--image-mapping=oklab-clusters",
         ]
     )
 
-    assert args.image_mapping == "hue"
+    assert args.image_mapping == "oklab-clusters"
 
 
 def test_help_lists_image_mapping_option(capsys) -> None:
@@ -86,13 +62,9 @@ def test_help_lists_image_mapping_option(capsys) -> None:
 
     help_text = capsys.readouterr().out
     assert "--image-mapping" in help_text
-    assert "--HSL" in help_text
-    assert "--Oklab" in help_text
+    assert "--lightness-step" in help_text
     assert "grayscaled" in help_text
-    assert "hue" in help_text
-    assert "hsl-clusters" in help_text
     assert "oklab-clusters" in help_text
-    assert "hsl-distance" in help_text
     assert "outputs/{input_image}--{palette}--{image_mapping}.png" in help_text
 
 
@@ -100,10 +72,10 @@ def test_default_mapped_output_path_uses_input_palette_and_mapping_stems() -> No
     output_path = default_mapped_output_path(
         input_image=Path("images/lenna.png"),
         palette=Path("palettes/warm.json"),
-        image_mapping="hsl-clusters",
+        image_mapping="oklab-clusters",
     )
 
-    assert output_path == Path("outputs/lenna--warm--hsl-clusters.png")
+    assert output_path == Path("outputs/lenna--warm--oklab-clusters.png")
 
 
 def test_generate_palette_command_writes_png_and_json(tmp_path) -> None:
@@ -114,8 +86,8 @@ def test_generate_palette_command_writes_png_and_json(tmp_path) -> None:
             "--generate-palette",
             "-c",
             "#336699",
-            "-B",
-            "0.1",
+            "-L",
+            "0.0",
             "-p",
             "5",
             "-o",
@@ -130,18 +102,17 @@ def test_generate_palette_command_writes_png_and_json(tmp_path) -> None:
     assert json_path.is_file()
     metadata = json.loads(json_path.read_text(encoding="utf-8"))
     assert metadata["seed"] == "#336699"
-    assert metadata["color_space"] == "HSL"
+    assert metadata["color_space"] == "OKlab"
     assert metadata["palette_size"] == 5
     assert len(metadata["colors"]) == 5
 
 
-def test_generate_oklab_palette_command_writes_signed_steps_to_json(tmp_path) -> None:
+def test_generate_palette_command_writes_signed_steps_to_json(tmp_path) -> None:
     parser = build_parser()
     output = tmp_path / "palette.png"
     args = parser.parse_args(
         [
             "--generate-palette",
-            "--Oklab",
             "-c",
             "#336699",
             "-L",
@@ -205,7 +176,7 @@ def test_map_rejects_palette_size_that_does_not_match_colors(tmp_path) -> None:
             {
                 "colors": ["#000000", "#ffffff"],
                 "seed": "#336699",
-                "step_values": {"hue": 0.0, "saturation": 0.0, "brightness": 0.1},
+                "step_values": {"lightness": 0.0, "a": 0.0, "b": 0.1},
                 "palette_size": 3,
             }
         ),
@@ -236,7 +207,7 @@ def test_map_command_writes_output_image(tmp_path) -> None:
             {
                 "colors": ["#000000", "#808080", "#ffffff"],
                 "seed": "#336699",
-                "step_values": {"hue": 0.0, "saturation": 0.0, "brightness": 0.1},
+                "step_values": {"lightness": 0.0, "a": 0.0, "b": 0.1},
                 "palette_size": 3,
             }
         ),
@@ -270,7 +241,7 @@ def test_map_command_uses_selected_image_mapping(tmp_path, monkeypatch) -> None:
             {
                 "colors": ["#000000", "#808080", "#ffffff"],
                 "seed": "#336699",
-                "step_values": {"hue": 0.0, "saturation": 0.0, "brightness": 0.1},
+                "step_values": {"lightness": 0.0, "a": 0.0, "b": 0.1},
                 "palette_size": 3,
             }
         ),
@@ -283,7 +254,7 @@ def test_map_command_uses_selected_image_mapping(tmp_path, monkeypatch) -> None:
             str(image_path),
             "--palette",
             str(palette_path),
-            "--image-mapping=hue",
+            "--image-mapping=oklab-clusters",
             "-o",
             str(output_path),
         ]
@@ -298,7 +269,7 @@ def test_map_command_uses_selected_image_mapping(tmp_path, monkeypatch) -> None:
 
     map_command(args, parser)
 
-    assert isinstance(captured["image_mapping"], HueImageMapping)
+    assert isinstance(captured["image_mapping"], OKlabClustersImageMapping)
     assert captured["palette"] == Pallette(
         palette_size=3,
         colors=("#000000", "#808080", "#ffffff"),

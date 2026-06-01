@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from oklab import rgb_array_to_oklab
 from palette import Pallette
 from palette_generation import hex_to_rgb
 
@@ -38,62 +39,6 @@ class DesaturationImageMapping(ImageMapping):
         return np.rint((grey_values / 255) * max_index).astype(np.uint8)
 
 
-class HueImageMapping(ImageMapping):
-    """Quantize pixels by hue in HSV/HSL-like color space."""
-
-    name = "hue"
-
-    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
-        hue_values = np.asarray(image.convert("HSV"), dtype=np.float32)[:, :, 0]
-
-        if palette.palette_size == 1:
-            return np.zeros(hue_values.shape, dtype=np.uint8)
-
-        min_hue = hue_values.min()
-        max_hue = hue_values.max()
-        if min_hue == max_hue:
-            return np.zeros(hue_values.shape, dtype=np.uint8)
-
-        normalized_hues = (hue_values - min_hue) / (max_hue - min_hue)
-        image_map = np.floor(normalized_hues * palette.palette_size).astype(_image_map_dtype(palette.palette_size))
-        image_map[image_map == palette.palette_size] = palette.palette_size - 1
-
-        # apply majority filter to smooth out small hue clusters
-        for _ in range(1):
-            image_map = _majority_filter_if_supported(image_map, kernel_size=3)
-        return image_map
-
-
-class HSLClustersImageMapping(ImageMapping):
-    """Cluster pixels in HSL color space with deterministic k-means."""
-
-    name = "hsl-clusters"
-
-    def __init__(self, max_iterations: int = 20) -> None:
-        if max_iterations < 1:
-            raise ValueError("Max iterations must be at least 1.")
-
-        self.max_iterations = max_iterations
-
-    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
-        rgb_values = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
-        height, width = rgb_values.shape[:2]
-        if palette.palette_size == 1:
-            return np.zeros((height, width), dtype=np.uint8)
-
-        hsl_points = _rgb_to_hsl(rgb_values).reshape(-1, 3)
-        cluster_count = min(palette.palette_size, len(np.unique(hsl_points, axis=0)))
-        if cluster_count == 1:
-            return np.zeros((height, width), dtype=np.uint8)
-
-        labels = _k_means_labels(hsl_points, cluster_count, self.max_iterations)
-
-        # apply majority filter to smooth out small clusters
-        for _ in range(3):
-            labels = _majority_filter_if_supported(labels.reshape(height, width), kernel_size=3)
-        return labels.astype(_image_map_dtype(palette.palette_size))
-
-
 class OKlabClustersImageMapping(ImageMapping):
     """Cluster pixels in OKlab color space with deterministic k-means."""
 
@@ -111,39 +56,17 @@ class OKlabClustersImageMapping(ImageMapping):
         if palette.palette_size == 1:
             return np.zeros((height, width), dtype=np.uint8)
 
-        oklab_points = _rgb_to_oklab(rgb_values).reshape(-1, 3)
+        oklab_points = rgb_array_to_oklab(rgb_values).reshape(-1, 3)
         cluster_count = min(palette.palette_size, len(np.unique(oklab_points, axis=0)))
         if cluster_count == 1:
             return np.zeros((height, width), dtype=np.uint8)
 
         labels, centers = _k_means(oklab_points, cluster_count, self.max_iterations)
         palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
-        palette_oklab = _rgb_to_oklab(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
+        palette_oklab = rgb_array_to_oklab(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
         labels = _map_cluster_labels_to_palette_indices(labels, centers, palette_oklab)
 
         return labels.reshape(height, width).astype(_image_map_dtype(palette.palette_size))
-
-
-class HSLPaletteDistanceImageMapping(ImageMapping):
-    """Map each pixel to the nearest palette color in HSL color space."""
-
-    name = "hsl-distance"
-
-    def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
-        rgb_values = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
-        height, width = rgb_values.shape[:2]
-        if palette.palette_size == 1:
-            return np.zeros((height, width), dtype=np.uint8)
-
-        pixel_hsl = _rgb_to_hsl(rgb_values).reshape(-1, 3)
-        palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
-        palette_hsl = _rgb_to_hsl(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
-
-        hsl_delta = np.abs(pixel_hsl[:, np.newaxis, :] - palette_hsl[np.newaxis, :, :])
-        hsl_delta[:, :, 0] = np.minimum(hsl_delta[:, :, 0], 1 - hsl_delta[:, :, 0])
-        distances = np.sum(hsl_delta**2, axis=2)
-
-        return np.argmin(distances, axis=1).reshape(height, width).astype(_image_map_dtype(palette.palette_size))
 
 
 def image_map_to_grayscale(image_map: np.ndarray) -> Image.Image:
@@ -162,83 +85,6 @@ def image_map_to_grayscale(image_map: np.ndarray) -> Image.Image:
 
     scaled = ((image_map.astype(np.float32) - min_value) / (max_value - min_value) * 255).astype(np.uint8)
     return Image.fromarray(scaled, mode="L")
-
-
-def _rgb_to_hsl(rgb_values: np.ndarray) -> np.ndarray:
-    """Convert RGB values in the [0, 1] range to HSL points."""
-    red = rgb_values[:, :, 0]
-    green = rgb_values[:, :, 1]
-    blue = rgb_values[:, :, 2]
-
-    max_channel = rgb_values.max(axis=2)
-    min_channel = rgb_values.min(axis=2)
-    delta = max_channel - min_channel
-
-    lightness = (max_channel + min_channel) / 2
-    hue = np.zeros_like(lightness)
-    saturation = np.zeros_like(lightness)
-
-    colored = delta != 0
-    saturation[colored] = np.where(
-        lightness[colored] > 0.5,
-        delta[colored] / (2 - max_channel[colored] - min_channel[colored]),
-        delta[colored] / (max_channel[colored] + min_channel[colored]),
-    )
-
-    red_is_max = colored & (max_channel == red)
-    green_is_max = colored & (max_channel == green)
-    blue_is_max = colored & (max_channel == blue)
-
-    hue[red_is_max] = ((green[red_is_max] - blue[red_is_max]) / delta[red_is_max]) % 6
-    hue[green_is_max] = ((blue[green_is_max] - red[green_is_max]) / delta[green_is_max]) + 2
-    hue[blue_is_max] = ((red[blue_is_max] - green[blue_is_max]) / delta[blue_is_max]) + 4
-    hue /= 6
-
-    return np.stack((hue, saturation, lightness), axis=2)
-
-
-def _rgb_to_oklab(rgb_values: np.ndarray) -> np.ndarray:
-    """Convert sRGB values in the [0, 1] range to OKlab points."""
-    linear_rgb = np.where(
-        rgb_values <= 0.04045,
-        rgb_values / 12.92,
-        ((rgb_values + 0.055) / 1.055) ** 2.4,
-    )
-
-    red = linear_rgb[:, :, 0]
-    green = linear_rgb[:, :, 1]
-    blue = linear_rgb[:, :, 2]
-
-    long_cone = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue
-    medium_cone = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue
-    short_cone = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue
-
-    long_cone_root = np.cbrt(long_cone)
-    medium_cone_root = np.cbrt(medium_cone)
-    short_cone_root = np.cbrt(short_cone)
-
-    lightness = (
-        0.2104542553 * long_cone_root
-        + 0.7936177850 * medium_cone_root
-        - 0.0040720468 * short_cone_root
-    )
-    green_red = (
-        1.9779984951 * long_cone_root
-        - 2.4285922050 * medium_cone_root
-        + 0.4505937099 * short_cone_root
-    )
-    blue_yellow = (
-        0.0259040371 * long_cone_root
-        + 0.7827717662 * medium_cone_root
-        - 0.8086757660 * short_cone_root
-    )
-
-    return np.stack((lightness, green_red, blue_yellow), axis=2)
-
-
-def _k_means_labels(points: np.ndarray, cluster_count: int, max_iterations: int) -> np.ndarray:
-    labels, _ = _k_means(points, cluster_count, max_iterations)
-    return labels
 
 
 def _k_means(points: np.ndarray, cluster_count: int, max_iterations: int) -> tuple[np.ndarray, np.ndarray]:
@@ -323,10 +169,7 @@ def _majority_filter_if_supported(image_map: np.ndarray, kernel_size: int) -> np
 
 IMAGE_MAPPING_CLASSES = {
     DesaturationImageMapping.name: DesaturationImageMapping,
-    HueImageMapping.name: HueImageMapping,
-    HSLClustersImageMapping.name: HSLClustersImageMapping,
     OKlabClustersImageMapping.name: OKlabClustersImageMapping,
-    HSLPaletteDistanceImageMapping.name: HSLPaletteDistanceImageMapping,
 }
 
 
@@ -396,29 +239,11 @@ if __name__ == "__main__":
         ),
     )
 
-    # # test hsl clusters mapping
-    # mapping = HSLClustersImageMapping()
-    # image_map = mapping.map_image(Image.open(image_input), test_palette)
-    # visualization = image_map_to_grayscale(image_map)
-    # visualization.save("lenna_hsl_clusters.png")
-
     # # test gray mapping
     # mapping = DesaturationImageMapping()
     # image_map = mapping.map_image(Image.open(image_input), test_palette)
     # visualization = image_map_to_grayscale(image_map)
     # visualization.save("lenna_desaturation.png")
-
-    # # test hue mapping
-    # mapping = HueImageMapping()
-    # image_map = mapping.map_image(Image.open(image_input), test_palette)
-    # visualization = image_map_to_grayscale(image_map)
-    # visualization.save("lenna_hue.png")
-
-    # # test hsl distance mapping
-    # mapping = HSLPaletteDistanceImageMapping()
-    # image_map = mapping.map_image(Image.open(image_input), test_palette)
-    # visualization = image_map_to_grayscale(image_map)
-    # visualization.save("lenna_hsl_distance.png")
 
     # test oklab clusters mapping
     mapping = OKlabClustersImageMapping()

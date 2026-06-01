@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from image_processing import DEFAULT_IMAGE_MAPPING_NAME, create_image_mapping, image_mapping_names, map_image_with_palette
-from palette_generation import generate_oklab_palette, generate_palette, generate_random_hex_color, normalize_hex_color
+from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
 from utils import load_palette_json, save_palette_outputs
 
 
@@ -17,23 +17,14 @@ def positive_int(value: str) -> int:
     return parsed
 
 
-def hls_step(value: str) -> float:
-    parsed = float(value)
-    if parsed < 0 or parsed > 1:
-        raise argparse.ArgumentTypeError("step must be an HLS value between 0 and 1")
-    return parsed
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate palettes and map input images to generated palettes.",
         allow_abbrev=False,
         epilog=(
             "Examples:\n"
-            "  .venv/bin/python main.py --generate-palette --HSL --colors '#336699' --brightness-step 0.1 --palette-size 5\n"
-            "  .venv/bin/python main.py --generate-palette --Oklab -L 0.0 -a 0.1 -b 0.0 -p 10 -o palettes/test.png\n"
-            "  .venv/bin/python main.py --generate-palette -c '#cc5500' -H 0.08 -S 0.02 -B 0.05 -p 7 -o palettes/warm.png --verbose\n"
-            "  .venv/bin/python main.py --map --input-image lenna.png --palette palettes/warm.json --image-mapping=hue -o outputs/lenna.png"
+            "  .venv/bin/python main.py --generate-palette -c '#336699' -L 0.0 -a 0.1 -b 0.0 -p 10 -o palettes/test.png\n"
+            "  .venv/bin/python main.py --map --input-image lenna.png --palette palettes/test.json --image-mapping=oklab-clusters -o outputs/lenna.png"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -50,23 +41,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Map an input image to a palette JSON using the default posterisation technique.",
     )
 
-    color_space = parser.add_mutually_exclusive_group()
-    color_space.add_argument(
-        "--HSL",
-        dest="color_space",
-        action="store_const",
-        const="HSL",
-        default="HSL",
-        help="Generate palette steps in HSL/HLS color space. This is the default.",
-    )
-    color_space.add_argument(
-        "--Oklab",
-        dest="color_space",
-        action="store_const",
-        const="OKlab",
-        help="Generate palette steps in OKlab color space.",
-    )
-
     parser.add_argument(
         "-c",
         "--colors",
@@ -76,46 +50,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seed color encoded as hexadecimal #RRGGBB. If omitted during palette generation, a random seed is used.",
     )
     parser.add_argument(
-        "-H",
-        "--hue-step",
-        type=hls_step,
-        default=0.0,
-        help="HLS hue step between neighboring colors, in the real range [0, 1]. Hue wraps around the color wheel.",
-    )
-    parser.add_argument(
-        "-S",
-        "--saturation-step",
-        type=hls_step,
-        default=0.0,
-        help="HLS saturation step between neighboring colors, in the real range [0, 1].",
-    )
-    parser.add_argument(
-        "-B",
-        "--brightness-step",
-        type=hls_step,
-        default=0.0,
-        help="Brightness step between neighboring colors, mapped to HLS lightness in the real range [0, 1].",
-    )
-    parser.add_argument(
         "-L",
         "--lightness-step",
         type=float,
         default=0.0,
-        help="OKlab L step between neighboring colors. Used with --Oklab.",
+        help="OKlab L step between neighboring colors.",
     )
     parser.add_argument(
         "-a",
         "--green-red-step",
         type=float,
         default=0.0,
-        help="OKlab a step between neighboring colors. Used with --Oklab and may be negative.",
+        help="OKlab a step between neighboring colors. May be negative.",
     )
     parser.add_argument(
         "-b",
         "--blue-yellow-step",
         type=float,
         default=0.0,
-        help="OKlab b step between neighboring colors. Used with --Oklab and may be negative.",
+        help="OKlab b step between neighboring colors. May be negative.",
     )
     parser.add_argument(
         "-p",
@@ -170,48 +123,28 @@ def generate_palette_command(args: argparse.Namespace, parser: argparse.Argument
 
     try:
         seed_color = normalize_hex_color(args.color) if args.color else generate_random_hex_color()
-        if args.color_space == "OKlab":
-            palette = generate_oklab_palette(
-                seed_color=seed_color,
-                lightness_step=args.lightness_step,
-                green_red_step=args.green_red_step,
-                blue_yellow_step=args.blue_yellow_step,
-                palette_size=palette_size,
-            )
-        else:
-            palette = generate_palette(
-                seed_color=seed_color,
-                hue_step=args.hue_step,
-                saturation_step=args.saturation_step,
-                brightness_step=args.brightness_step,
-                palette_size=palette_size,
-            )
+        palette = generate_palette(
+            seed_color=seed_color,
+            lightness_step=args.lightness_step,
+            green_red_step=args.green_red_step,
+            blue_yellow_step=args.blue_yellow_step,
+            palette_size=palette_size,
+        )
     except (OSError, ValueError) as error:
         parser.error(str(error))
 
     if args.verbose:
-        if args.color_space == "OKlab":
-            print(
-                "Color palette from seed "
-                f"{seed_color}, OKlab L step {args.lightness_step}, a step {args.green_red_step}, "
-                f"b step {args.blue_yellow_step}, and size {palette_size}"
-            )
-        else:
-            print(
-                "Color palette from seed "
-                f"{seed_color}, hue step {args.hue_step}, saturation step {args.saturation_step}, "
-                f"brightness step {args.brightness_step}, and size {palette_size}"
-            )
+        print(
+            "Color palette from seed "
+            f"{seed_color}, OKlab L step {args.lightness_step}, a step {args.green_red_step}, "
+            f"b step {args.blue_yellow_step}, and size {palette_size}"
+        )
 
     image_path, json_path = save_palette_outputs(
         palette=palette,
         seed_color=seed_color,
-        hue_step=args.hue_step,
-        saturation_step=args.saturation_step,
-        brightness_step=args.brightness_step,
         palette_size=palette_size,
         output_path=output_path,
-        color_space=args.color_space,
         lightness_step=args.lightness_step,
         green_red_step=args.green_red_step,
         blue_yellow_step=args.blue_yellow_step,

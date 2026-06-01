@@ -53,37 +53,25 @@ def save_palette_png(
 def save_palette_json(
     palette: list[str],
     seed_color: str,
-    hue_step: float,
-    saturation_step: float,
-    brightness_step: float,
     palette_size: int,
     output_path: str | Path = "palettes/palette.json",
-    color_space: str = "HSL",
-    lightness_step: float | None = None,
-    green_red_step: float | None = None,
-    blue_yellow_step: float | None = None,
+    lightness_step: float = 0.0,
+    green_red_step: float = 0.0,
+    blue_yellow_step: float = 0.0,
 ) -> Path:
     """Save palette colors and generation parameters as JSON."""
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    step_values = {
-        "hue": hue_step,
-        "saturation": saturation_step,
-        "brightness": brightness_step,
-    }
-    if color_space == "OKlab":
-        step_values = {
-            "lightness": lightness_step if lightness_step is not None else 0.0,
-            "a": green_red_step if green_red_step is not None else 0.0,
-            "b": blue_yellow_step if blue_yellow_step is not None else 0.0,
-        }
-
     data = {
         "colors": palette,
         "seed": seed_color,
-        "color_space": color_space,
-        "step_values": step_values,
+        "color_space": "OKlab",
+        "step_values": {
+            "lightness": lightness_step,
+            "a": green_red_step,
+            "b": blue_yellow_step,
+        },
         "palette_size": palette_size,
     }
     output.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -93,27 +81,19 @@ def save_palette_json(
 def save_palette_outputs(
     palette: list[str],
     seed_color: str,
-    hue_step: float,
-    saturation_step: float,
-    brightness_step: float,
     palette_size: int,
     output_path: str | Path = "palettes/palette.png",
-    color_space: str = "HSL",
-    lightness_step: float | None = None,
-    green_red_step: float | None = None,
-    blue_yellow_step: float | None = None,
+    lightness_step: float = 0.0,
+    green_red_step: float = 0.0,
+    blue_yellow_step: float = 0.0,
 ) -> tuple[Path, Path]:
     """Save a palette as both a PNG preview and same-name JSON metadata."""
     png_path = save_palette_png(palette, output_path)
     json_path = save_palette_json(
         palette=palette,
         seed_color=seed_color,
-        hue_step=hue_step,
-        saturation_step=saturation_step,
-        brightness_step=brightness_step,
         palette_size=palette_size,
         output_path=png_path.with_suffix(".json"),
-        color_space=color_space,
         lightness_step=lightness_step,
         green_red_step=green_red_step,
         blue_yellow_step=blue_yellow_step,
