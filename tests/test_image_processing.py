@@ -5,6 +5,7 @@ from PIL import Image
 from image_processing import (
     DesaturationImageMapping,
     OKlabClustersImageMapping,
+    _map_cluster_labels_to_palette_indices,
     image_map_to_grayscale,
 )
 from palette import Pallette
@@ -57,6 +58,21 @@ def test_oklab_clusters_image_mapping_clusters_pixels_by_oklab_similarity() -> N
     assert image_map[0, 0] != image_map[0, 2]
     assert image_map[0, 0] == 1
     assert image_map[0, 2] == 0
+
+
+def test_cluster_centers_map_to_distinct_palette_points() -> None:
+    labels = np.array([0, 1], dtype=np.int32)
+    centers = np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]], dtype=np.float32)
+    palette_points = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]], dtype=np.float32)
+
+    mapped_labels = _map_cluster_labels_to_palette_indices(
+        labels,
+        centers,
+        palette_points,
+        rng=np.random.default_rng(0),
+    )
+
+    assert set(mapped_labels.tolist()) == {0, 1}
 
 
 def test_pallette_rejects_size_that_does_not_match_colors() -> None:

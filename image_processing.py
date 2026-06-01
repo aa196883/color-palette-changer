@@ -117,9 +117,20 @@ def _map_cluster_labels_to_palette_indices(
     labels: np.ndarray,
     centers: np.ndarray,
     palette_points: np.ndarray,
+    rng: np.random.Generator | None = None,
 ) -> np.ndarray:
-    distances = np.sum((centers[:, np.newaxis, :] - palette_points[np.newaxis, :, :]) ** 2, axis=2)
-    cluster_to_palette = np.argmin(distances, axis=1)
+    if len(centers) > len(palette_points):
+        raise ValueError("Each cluster center requires a distinct palette point.")
+
+    random = rng or np.random.default_rng()
+    remaining_palette_indices = list(range(len(palette_points)))
+    cluster_to_palette = np.empty(len(centers), dtype=np.int32)
+
+    for center_index in random.permutation(len(centers)):
+        remaining_palette_points = palette_points[remaining_palette_indices]
+        distances = np.sum((remaining_palette_points - centers[center_index]) ** 2, axis=1)
+        remaining_index = int(np.argmin(distances))
+        cluster_to_palette[center_index] = remaining_palette_indices.pop(remaining_index)
 
     return cluster_to_palette[labels]
 
