@@ -28,6 +28,9 @@ class DesaturationImageMapping(ImageMapping):
 
     name = "grayscaled"
 
+    def __init__(self, rng: np.random.Generator | None = None) -> None:
+        self.rng = rng
+
     def map_image(self, image: Image.Image, palette: Pallette) -> np.ndarray:
         grayscale = image.convert("L")
         grey_values = np.asarray(grayscale, dtype=np.float32)
@@ -36,7 +39,16 @@ class DesaturationImageMapping(ImageMapping):
             return np.zeros(grey_values.shape, dtype=np.uint8)
 
         max_index = palette.palette_size - 1
-        return np.rint((grey_values / 255) * max_index).astype(np.uint8)
+        grayscale_labels = np.rint((grey_values / 255) * max_index).astype(_image_map_dtype(palette.palette_size))
+        palette_oklab = _palette_oklab_points(palette)
+
+        label_to_palette = _map_grayscale_labels_to_palette_indices(
+            palette_size=palette.palette_size,
+            palette_points=palette_oklab,
+            rng=self.rng,
+        )
+
+        return label_to_palette[grayscale_labels].astype(_image_map_dtype(palette.palette_size))
 
 
 class OKlabClustersImageMapping(ImageMapping):
@@ -133,6 +145,43 @@ def _map_cluster_labels_to_palette_indices(
         cluster_to_palette[center_index] = remaining_palette_indices.pop(remaining_index)
 
     return cluster_to_palette[labels]
+
+
+def _map_grayscale_labels_to_palette_indices(
+    palette_size: int,
+    palette_points: np.ndarray,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    gray_points = _grayscale_oklab_points(palette_size)
+
+    if _has_varying_lightness(palette_points):
+        labels = np.arange(palette_size, dtype=_image_map_dtype(palette_size))
+        return _map_cluster_labels_to_palette_indices(
+            labels,
+            gray_points[:, :1],
+            palette_points[:, :1],
+            rng=rng,
+        ).astype(_image_map_dtype(palette_size))
+
+    labels = np.arange(palette_size, dtype=_image_map_dtype(palette_size))
+    return _map_cluster_labels_to_palette_indices(labels, gray_points, palette_points, rng=rng).astype(
+        _image_map_dtype(palette_size)
+    )
+
+
+def _palette_oklab_points(palette: Pallette) -> np.ndarray:
+    palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
+    return rgb_array_to_oklab(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
+
+
+def _grayscale_oklab_points(palette_size: int) -> np.ndarray:
+    gray_values = np.linspace(0, 1, palette_size, dtype=np.float32)
+    gray_rgb = np.repeat(gray_values[np.newaxis, :, np.newaxis], 3, axis=2)
+    return rgb_array_to_oklab(gray_rgb).reshape(palette_size, 3)
+
+
+def _has_varying_lightness(palette_points: np.ndarray) -> bool:
+    return not np.allclose(palette_points[:, 0], palette_points[0, 0])
 
 
 def _initial_cluster_centers(points: np.ndarray, cluster_count: int) -> np.ndarray:
@@ -250,11 +299,11 @@ if __name__ == "__main__":
         ),
     )
 
-    # # test gray mapping
-    # mapping = DesaturationImageMapping()
-    # image_map = mapping.map_image(Image.open(image_input), test_palette)
-    # visualization = image_map_to_grayscale(image_map)
-    # visualization.save("lenna_desaturation.png")
+    # test gray mapping
+    mapping = DesaturationImageMapping()
+    image_map = mapping.map_image(Image.open(image_input), test_palette)
+    visualization = image_map_to_grayscale(image_map)
+    visualization.save("lenna_desaturation.png")
 
     # test oklab clusters mapping
     mapping = OKlabClustersImageMapping()

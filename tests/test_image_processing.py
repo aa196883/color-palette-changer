@@ -6,6 +6,7 @@ from image_processing import (
     DesaturationImageMapping,
     OKlabClustersImageMapping,
     _map_cluster_labels_to_palette_indices,
+    _map_grayscale_labels_to_palette_indices,
     image_map_to_grayscale,
 )
 from palette import Pallette
@@ -23,10 +24,58 @@ def test_pallette_rejects_empty_palette_size() -> None:
 def test_desaturation_image_mapping_still_returns_2d_indices() -> None:
     image = Image.new("RGB", (2, 1))
     image.putdata([(0, 0, 0), (255, 255, 255)])
+    palette = Pallette(palette_size=3, colors=("#000000", "#808080", "#ffffff"))
 
-    image_map = DesaturationImageMapping().map_image(image, palette_data(3))
+    image_map = DesaturationImageMapping().map_image(image, palette)
 
     np.testing.assert_array_equal(image_map, np.array([[0, 2]], dtype=np.uint8))
+
+
+def test_desaturation_image_mapping_uses_palette_lightness() -> None:
+    image = Image.new("RGB", (2, 1))
+    image.putdata([(0, 0, 0), (255, 255, 255)])
+    palette = Pallette(palette_size=2, colors=("#ffffff", "#000000"))
+
+    image_map = DesaturationImageMapping().map_image(image, palette)
+
+    np.testing.assert_array_equal(image_map, np.array([[1, 0]], dtype=np.uint8))
+
+
+def test_varying_lightness_grayscale_mapping_uses_one_to_one_assignment() -> None:
+    palette_points = np.array(
+        [
+            [0.90, 0.0, 0.0],
+            [1.00, 0.0, 0.0],
+            [0.95, 0.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+
+    label_to_palette = _map_grayscale_labels_to_palette_indices(
+        palette_size=3,
+        palette_points=palette_points,
+        rng=np.random.default_rng(0),
+    )
+
+    assert set(label_to_palette.tolist()) == {0, 1, 2}
+
+
+def test_identical_lightness_grayscale_mapping_uses_one_to_one_oklab_assignment() -> None:
+    palette_points = np.array(
+        [
+            [0.5, 0.0, 0.0],
+            [0.5, 0.1, 0.0],
+        ],
+        dtype=np.float32,
+    )
+
+    label_to_palette = _map_grayscale_labels_to_palette_indices(
+        palette_size=2,
+        palette_points=palette_points,
+        rng=np.random.default_rng(0),
+    )
+
+    assert set(label_to_palette.tolist()) == {0, 1}
 
 
 def test_oklab_clusters_image_mapping_clusters_pixels_by_oklab_similarity() -> None:
