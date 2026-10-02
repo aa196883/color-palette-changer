@@ -196,9 +196,12 @@ def test_map_rejects_palette_size_that_does_not_match_colors(tmp_path) -> None:
         map_command(args, parser)
 
 
-def test_map_command_writes_output_image(tmp_path) -> None:
+@pytest.mark.parametrize("relative_input", [False, True])
+def test_map_command_writes_output_image(tmp_path, monkeypatch, relative_input) -> None:
+    monkeypatch.chdir(tmp_path)
     parser = build_parser()
-    image_path = tmp_path / "input.png"
+    (tmp_path / "inputs").mkdir()
+    image_path = tmp_path / "inputs" / "input.png"
     palette_path = tmp_path / "palette.json"
     output_path = tmp_path / "mapped.png"
     Image.new("RGB", (2, 2), (128, 128, 128)).save(image_path)
@@ -217,7 +220,7 @@ def test_map_command_writes_output_image(tmp_path) -> None:
         [
             "--map",
             "--input-image",
-            str(image_path),
+            image_path.name if relative_input else str(image_path),
             "--palette",
             str(palette_path),
             "-o",

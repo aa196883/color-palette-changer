@@ -81,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--input-image",
         type=Path,
         default=None,
-        help="Input image path used with --map.",
+        help="Input image path relative to inputs/ (or an absolute path), used with --map.",
     )
     parser.add_argument(
         "--palette",
@@ -161,6 +161,7 @@ def default_mapped_output_path(input_image: Path, palette: Path, image_mapping: 
 def map_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.input_image is None:
         parser.error("--map requires --input-image")
+    args.input_image = Path("inputs") / args.input_image
     if not args.input_image.is_file():
         parser.error(f"input image missing: {args.input_image}")
     if args.palette is None:

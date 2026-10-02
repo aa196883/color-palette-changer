@@ -45,6 +45,10 @@ python main.py --generate-palette -c "#336699" -L 0.0 -a 0.1 -b 0.0 -p 10 -o pal
 
 ## Map an Image
 
+Source images are stored in `inputs/`, including `lenna.png` and `witch_shelf.png`.
+Relative `--input-image` paths are resolved inside `inputs/` in the current working directory;
+provide the filename without the `inputs/` prefix. Absolute image paths are also supported.
+
 Map an input image with brightness-based mapping:
 
 ```bash
@@ -86,7 +90,7 @@ Palette generation options:
 
 Image mapping options:
 
-- `--input-image`: source image to recolor.
+- `--input-image`: source image path relative to `inputs/`, or an absolute path.
 - `--palette`: palette JSON file.
 - `--image-mapping`: mapping strategy, either `grayscaled` or `oklab-clusters`.
 - `-o`, `--output`: output image path. If omitted, the file is written under `outputs/`.

@@ -342,7 +342,7 @@ def map_image_with_palette(
 
 # Test code for mapper
 if __name__ == "__main__":
-    image_input = "lenna.png"
+    image_input = "inputs/lenna.png"
 
     # test palette with 8 grays
     test_palette = Pallette(
