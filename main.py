@@ -42,6 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--mode",
+        choices=("complementary", "analogous"),
+        default="analogous",
+        help=(
+            "Palette generation strategy (default: analogous). Complementary samples a random "
+            "a/b line at the seed lightness and ignores -L, -a, and -b."
+        ),
+    )
+    parser.add_argument(
         "-c",
         "--colors",
         "--color",
@@ -129,13 +138,14 @@ def generate_palette_command(args: argparse.Namespace, parser: argparse.Argument
             green_red_step=args.green_red_step,
             blue_yellow_step=args.blue_yellow_step,
             palette_size=palette_size,
+            mode=args.mode,
         )
     except (OSError, ValueError) as error:
         parser.error(str(error))
 
     if args.verbose:
         print(
-            "Color palette from seed "
+            f"{args.mode.capitalize()} color palette from seed "
             f"{seed_color}, OKlab L step {args.lightness_step}, a step {args.green_red_step}, "
             f"b step {args.blue_yellow_step}, and size {palette_size}"
         )

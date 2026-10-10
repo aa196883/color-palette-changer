@@ -36,6 +36,28 @@ def test_generate_palette_cli_inputs() -> None:
     assert args.blue_yellow_step == 0.05
     assert args.palette_size == 7
     assert args.image_mapping == "grayscaled"
+    assert args.mode == "analogous"
+
+
+def test_invalid_generation_mode_is_rejected() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--generate-palette", "--mode", "unknown"])
+
+
+def test_complementary_cli_writes_loadable_palette(tmp_path) -> None:
+    parser = build_parser()
+    output = tmp_path / "complementary.png"
+    args = parser.parse_args([
+        "--generate-palette", "--mode", "complementary",
+        "-c", "#336699", "-p", "4", "-o", str(output),
+    ])
+    generate_palette_command(args, parser)
+
+    palette = load_palette_json(output.with_suffix(".json"))
+    assert palette.palette_size == 4
+    assert len(set(palette.colors)) > 1
+    with Image.open(output) as preview:
+        assert preview.size == (480, 120)
 
 
 def test_map_image_mapping_cli_inputs() -> None:

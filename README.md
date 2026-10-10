@@ -128,7 +128,39 @@ You can also provide a fixed seed color:
 python main.py --generate-palette -c "#336699" -L 0.0 -a 0.1 -b 0.0 -p 10 -o palettes/blue_ramp.png
 ```
 
-### Seed Position and Stepping
+### Complementary Line Mode (CLI)
+
+`--mode analogous` is the default and preserves the existing seed-and-step
+generation. Use `--mode complementary` to sample a straight line through neutral
+in the OKlab green-red (`a`) / blue-yellow (`b`) plane:
+
+```bash
+python main.py --generate-palette --mode complementary -c "#336699" -p 4 -o palettes/complementary.png
+```
+
+The seed supplies a constant lightness. A random angle in `[0, pi]` sets the
+line's direction, and the line extends to opposite boundaries of a working
+square with both axes ranging from `-0.4` to `0.4`. Thus at least one axis spans
+the full working range; the square is not an sRGB gamut boundary.
+
+For `N` colors, divide the line into `N + 1` equal segments and use the `N`
+interior boundaries, excluding the outer endpoints. This gives equal spacing
+along the line before RGB conversion. Odd sizes include neutral at the center;
+size one produces only that neutral color. Even sizes straddle neutral.
+
+The `-L`, `-a`, and `-b` step options are ignored in complementary mode. The
+direction is randomized on each call, even with a fixed seed color. Existing
+RGB clipping still applies and can distort spacing or create duplicates.
+This straight-line method produces opposing hues, not a triadic or square
+arrangement around a hue circle. The web interface continues to use analogous
+generation.
+
+PNG and JSON exports remain compatible with existing mappers. The JSON stores
+the resulting colors in the existing schema; it does not record the random
+line direction or mode, so seed and step metadata alone cannot recreate a
+complementary palette. Reuse its saved `colors` instead.
+
+### Seed Position and Stepping (Analogous Mode)
 
 The seed is the **middle of a straight line of samples in OKlab**, rather than an endpoint. The input hex color is normalized, decoded as sRGB, converted to linear RGB, and then converted to OKlab. If no color is supplied, one integer is chosen uniformly from `0x000000` through `0xFFFFFF` and interpreted as an sRGB color; it follows the same conversion and stepping process. This is not uniform sampling of OKlab.
 
@@ -225,6 +257,7 @@ python main.py (--generate-palette | --map) [options]
 
 Palette generation options:
 
+- `--mode`: `analogous` (default) or `complementary` straight-line sampling.
 - `-c`, `--color`, `--colors`: seed color as `#RRGGBB`. If omitted, a random seed color is used.
 - `-L`, `--lightness-step`: OKlab `L` channel step.
 - `-a`, `--green-red-step`: OKlab `a` channel step.

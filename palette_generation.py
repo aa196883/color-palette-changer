@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 import re
 
@@ -9,6 +10,8 @@ from oklab import oklab_to_rgb, rgb_to_oklab
 
 
 HEX_COLOR_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
+# Working a/b square, not a promise that its samples are in the sRGB gamut.
+COMPLEMENTARY_AXIS_LIMIT = 0.4
 
 
 def generate_random_hex_color() -> str:
@@ -47,15 +50,37 @@ def generate_palette(
     green_red_step: float = 0.0,
     blue_yellow_step: float = 0.0,
     palette_size: int = 5,
+    mode: str = "analogous",
 ) -> list[str]:
-    """Generate a palette as #RRGGBB colors by stepping through OKlab channels."""
+    """Generate an analogous ramp or a random complementary line in OKlab.
+
+    Complementary mode uses only the seed's lightness and ignores steps.
+    Its N samples are the interior boundaries of N + 1 equal segments.
+    """
     if palette_size < 1:
         raise ValueError("Palette size must be at least 1.")
+    if mode not in ("analogous", "complementary"):
+        raise ValueError(f"Unknown palette mode: {mode}")
     if seed_color is None:
         seed_color = generate_random_hex_color()
 
     red, green, blue = hex_to_rgb(seed_color)
     lightness, green_red, blue_yellow = rgb_to_oklab((red / 255, green / 255, blue / 255))
+
+    if mode == "complementary":
+        # A uniform angle avoids an unbounded slope and handles vertical lines.
+        angle = random.uniform(0.0, math.pi)
+        direction_a, direction_b = math.cos(angle), math.sin(angle)
+        scale = COMPLEMENTARY_AXIS_LIMIT / max(abs(direction_a), abs(direction_b))
+        endpoint_a, endpoint_b = scale * direction_a, scale * direction_b
+        return [
+            _float_rgb_to_hex(oklab_to_rgb((
+                lightness,
+                (-1 + 2 * index / (palette_size + 1)) * endpoint_a,
+                (-1 + 2 * index / (palette_size + 1)) * endpoint_b,
+            )))
+            for index in range(1, palette_size + 1)
+        ]
 
     span_offset = (palette_size - 1) / 2
     oklab_values = [

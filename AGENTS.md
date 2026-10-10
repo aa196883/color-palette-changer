@@ -42,9 +42,14 @@ The web interface runs at `http://127.0.0.1:5000`. For isolated web tests, use
 
 ## Invariant behaviors
 
-- Palette samples follow `seed + (i - (N - 1) / 2) * step` in OKlab. Fixed
+- Analogous palette samples follow `seed + (i - (N - 1) / 2) * step` in OKlab. Fixed
   seed, steps, and size produce deterministic colors. Odd sizes include the
   central seed; even sizes straddle it. A seed is a hex color, not an RNG seed.
+- CLI `--mode` defaults to `analogous`; `complementary` samples a random line
+  through neutral across the a/b working square `[-0.4, 0.4]`, at seed lightness.
+  Use the N interior boundaries of N + 1 equal segments; ignore step options.
+  The web interface retains analogous generation. JSON stores final colors but
+  does not record the complementary mode or random direction.
 - CLI/API steps default to zero; the GUI initially uses lightness `0.08` and
   chromatic steps `0.02`. Clip out-of-gamut RGB channels and retain duplicate
   colors; palette size counts entries, not unique colors.
