@@ -46,10 +46,12 @@ The web interface runs at `http://127.0.0.1:5000`. For isolated web tests, use
   seed, steps, and size produce deterministic colors. Odd sizes include the
   central seed; even sizes straddle it. A seed is a hex color, not an RNG seed.
 - CLI `--mode` defaults to `analogous`; `complementary` samples a random line
-  through neutral across the a/b working square `[-0.4, 0.4]`, at seed lightness.
+  across the a/b working square `[-0.4, 0.4]`, at seed lightness. Randomly choose
+  the full-span axis, normalized slope m in [-1, 1], and intercept c in
+  [-(1 - abs(m)), 1 - abs(m)]. The line need not pass through neutral.
   Use the N interior boundaries of N + 1 equal segments; ignore step options.
   The web interface retains analogous generation. JSON stores final colors but
-  does not record the complementary mode or random direction.
+  does not record the complementary mode or random line parameters.
 - CLI/API steps default to zero; the GUI initially uses lightness `0.08` and
   chromatic steps `0.02`. Clip out-of-gamut RGB channels and retain duplicate
   colors; palette size counts entries, not unique colors.

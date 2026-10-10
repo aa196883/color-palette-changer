@@ -1,5 +1,3 @@
-import math
-
 import numpy as np
 import pytest
 
@@ -24,10 +22,20 @@ def test_normalize_hex_color_accepts_hashless_input() -> None:
 
 
 @pytest.mark.parametrize("size", [1, 2, 3, 4, 7])
-@pytest.mark.parametrize("angle", [0.0, math.pi / 4, math.pi / 2, 3 * math.pi / 4])
-def test_complementary_samples_are_evenly_spaced_on_centered_line(monkeypatch, size, angle):
+@pytest.mark.parametrize("axis", ["a", "b"])
+@pytest.mark.parametrize("slope,origin_fraction", [(0, 0.5), (0.5, -1), (-0.5, 1), (1, 0), (-1, 0)])
+def test_complementary_samples_cover_axis_with_random_offset(monkeypatch, size, axis, slope, origin_fraction):
     samples = []
-    monkeypatch.setattr("palette_generation.random.uniform", lambda low, high: angle)
+    origin = origin_fraction * (1 - abs(slope))
+    draws = iter([slope, origin])
+
+    def uniform(low, high):
+        value = next(draws)
+        assert low <= value <= high
+        return value
+
+    monkeypatch.setattr("palette_generation.random.choice", lambda choices: axis)
+    monkeypatch.setattr("palette_generation.random.uniform", uniform)
 
     def capture(sample):
         samples.append(sample)
@@ -38,25 +46,29 @@ def test_complementary_samples_are_evenly_spaced_on_centered_line(monkeypatch, s
     points = np.array(samples)
     assert len(colors) == size
     assert np.allclose(points[:, 0], points[0, 0])
-    assert np.allclose(points[:, 1:].mean(axis=0), 0)
-    assert np.all(np.abs(points[:, 1:]) < 0.4)
+    x = points[:, 1 if axis == "a" else 2] / 0.4
+    y = points[:, 2 if axis == "a" else 1] / 0.4
+    assert np.allclose(y, slope * x + origin)
+    assert np.mean(x) == pytest.approx(0)
+    assert np.mean(y) == pytest.approx(origin)
+    assert np.all(np.abs(points[:, 1:]) <= 0.4)
+    # Include the excluded endpoints: the selected axis covers its full range.
+    assert x[0] - 2 / (size + 1) == pytest.approx(-1)
+    assert x[-1] + 2 / (size + 1) == pytest.approx(1)
     if size > 1:
         deltas = np.diff(points[:, 1:], axis=0)
         assert np.allclose(deltas, deltas[0])
-        # Extending one segment beyond each end reaches opposite square edges.
-        assert max(abs(points[0, 1:] - deltas[0])) == pytest.approx(0.4)
-        assert max(abs(points[-1, 1:] + deltas[0])) == pytest.approx(0.4)
-        assert np.allclose(points[:, 1] * math.sin(angle), points[:, 2] * math.cos(angle))
 
 
 def test_complementary_ignores_steps_and_uses_random_direction(monkeypatch):
+    monkeypatch.setattr("palette_generation.random.choice", lambda choices: "a")
     monkeypatch.setattr("palette_generation.random.uniform", lambda low, high: 0.0)
     horizontal = generate_palette("#336699", palette_size=4, mode="complementary")
     assert horizontal == generate_palette(
         "#336699", lightness_step=0.2, green_red_step=-0.1,
         blue_yellow_step=0.3, palette_size=4, mode="complementary",
     )
-    monkeypatch.setattr("palette_generation.random.uniform", lambda low, high: math.pi / 2)
+    monkeypatch.setattr("palette_generation.random.choice", lambda choices: "b")
     assert horizontal != generate_palette("#336699", palette_size=4, mode="complementary")
 
 

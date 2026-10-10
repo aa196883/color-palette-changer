@@ -131,33 +131,36 @@ python main.py --generate-palette -c "#336699" -L 0.0 -a 0.1 -b 0.0 -p 10 -o pal
 ### Complementary Line Mode (CLI)
 
 `--mode analogous` is the default and preserves the existing seed-and-step
-generation. Use `--mode complementary` to sample a straight line through neutral
+generation. Use `--mode complementary` to sample a randomly offset straight line
 in the OKlab green-red (`a`) / blue-yellow (`b`) plane:
 
 ```bash
 python main.py --generate-palette --mode complementary -c "#336699" -p 4 -o palettes/complementary.png
 ```
 
-The seed supplies a constant lightness. A random angle in `[0, pi]` sets the
-line's direction, and the line extends to opposite boundaries of a working
-square with both axes ranging from `-0.4` to `0.4`. Thus at least one axis spans
-the full working range; the square is not an sRGB gamut boundary.
+The seed supplies a constant lightness. Randomly choose `a` or `b` as the x axis
+and cover its full normalized range `[-1, 1]`. Draw a slope `m` uniformly from
+`[-1, 1]`, then an origin (y intercept) `c` uniformly from
+`[-(1 - abs(m)), 1 - abs(m)]`. The line is `y = m*x + c`; this origin range keeps
+the other coordinate inside `[-1, 1]` without requiring it to span that range.
+Multiply both coordinates by `0.4` to use the existing OKlab working square.
+The line need not pass through neutral; the square is not an sRGB gamut boundary.
 
 For `N` colors, divide the line into `N + 1` equal segments and use the `N`
 interior boundaries, excluding the outer endpoints. This gives equal spacing
-along the line before RGB conversion. Odd sizes include neutral at the center;
-size one produces only that neutral color. Even sizes straddle neutral.
+along the line before RGB conversion. Odd sizes include the line's midpoint
+`(0, c)` in the chosen coordinates; size one produces just that midpoint.
 
 The `-L`, `-a`, and `-b` step options are ignored in complementary mode. The
-direction is randomized on each call, even with a fixed seed color. Existing
+axis, slope, and origin are randomized on each call, even with a fixed seed color. Existing
 RGB clipping still applies and can distort spacing or create duplicates.
-This straight-line method produces opposing hues, not a triadic or square
+This straight-line method does not guarantee a triadic or square
 arrangement around a hue circle. The web interface continues to use analogous
 generation.
 
 PNG and JSON exports remain compatible with existing mappers. The JSON stores
 the resulting colors in the existing schema; it does not record the random
-line direction or mode, so seed and step metadata alone cannot recreate a
+line parameters or mode, so seed and step metadata alone cannot recreate a
 complementary palette. Reuse its saved `colors` instead.
 
 ### Seed Position and Stepping (Analogous Mode)

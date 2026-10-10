@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import random
 import re
 
@@ -68,19 +67,21 @@ def generate_palette(
     lightness, green_red, blue_yellow = rgb_to_oklab((red / 255, green / 255, blue / 255))
 
     if mode == "complementary":
-        # A uniform angle avoids an unbounded slope and handles vertical lines.
-        angle = random.uniform(0.0, math.pi)
-        direction_a, direction_b = math.cos(angle), math.sin(angle)
-        scale = COMPLEMENTARY_AXIS_LIMIT / max(abs(direction_a), abs(direction_b))
-        endpoint_a, endpoint_b = scale * direction_a, scale * direction_b
-        return [
-            _float_rgb_to_hex(oklab_to_rgb((
-                lightness,
-                (-1 + 2 * index / (palette_size + 1)) * endpoint_a,
-                (-1 + 2 * index / (palette_size + 1)) * endpoint_b,
-            )))
-            for index in range(1, palette_size + 1)
-        ]
+        x_axis = random.choice(("a", "b"))
+        slope = random.uniform(-1.0, 1.0)
+        # In normalized coordinates, y = slope*x + origin for x in [-1, 1].
+        # Restrict the origin so the whole line stays inside the working square.
+        origin_limit = 1.0 - abs(slope)
+        origin = random.uniform(-origin_limit, origin_limit)
+        colors = []
+        for index in range(1, palette_size + 1):
+            x = -1 + 2 * index / (palette_size + 1)
+            y = slope * x + origin
+            a, b = (x, y) if x_axis == "a" else (y, x)
+            colors.append(_float_rgb_to_hex(oklab_to_rgb((
+                lightness, a * COMPLEMENTARY_AXIS_LIMIT, b * COMPLEMENTARY_AXIS_LIMIT,
+            ))))
+        return colors
 
     span_offset = (palette_size - 1) / 2
     oklab_values = [
