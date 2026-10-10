@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Palette Studio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body>
+<header><span class="eyebrow">COLOR PALETTE CHANGER</span><h1>Palette Studio<span>.</span></h1><p>A little color. A different perspective.</p></header>
+<main>
+  <p id="status" role="status" aria-live="polite">Generate a palette or choose one from your library.</p>
+  <section>
+    <div class="heading"><span class="number">01</span><div><h2>Find your colors</h2><p>Start with a seed, or leave it to chance.</p></div></div>
+    <form id="generate-form">
+      <div class="fields">
+        <label>Seed color<input id="seed" placeholder="Random · or #336699" pattern="#?[0-9a-fA-F]{6}" aria-describedby="seed-help"></label>
+        <label>Colors<input id="size" type="number" min="1" max="256" value="5" required></label>
+        <label>Lightness step<input id="lightness" type="number" min="-1" max="1" step="any" value="0.08" required></label>
+        <label>Green / red step<input id="red" type="number" min="-1" max="1" step="any" value="0.02" required></label>
+        <label>Blue / yellow step<input id="yellow" type="number" min="-1" max="1" step="any" value="0.02" required></label>
+      </div>
+      <p class="hint" id="seed-help">Steps move through OKlab color space. Reroll keeps your steps and picks a new seed.</p>
+      <button type="submit">Generate palette</button>
+    </form>
+    <div id="swatches" class="swatches"><p>Your next palette goes here.</p></div>
+    <p id="palette-detail" class="hint"></p>
+    <div class="actions"><button id="palette-reroll" class="secondary" disabled>Reroll seed</button><button id="palette-save" disabled>Save palette</button><a id="palette-download" hidden download>Download JSON ↓</a></div>
+  </section>
+  <section>
+    <div class="heading"><span class="number">02</span><div><h2>Give an image a new mood</h2><p>Choose your palette and image, then explore the possibilities.</p></div></div>
+    <div class="fields mapping-fields">
+      <label>Palette<select id="palette-select"><option value="">Choose a palette</option></select></label>
+      <label>Existing image<select id="image-select"><option value="">Choose an image</option></select></label>
+      <label>Mapping<select id="mode"><option value="grayscaled">Brightness levels</option><option value="oklab-clusters">OKlab clusters</option></select></label>
+      <label class="upload">Or upload an image<input id="upload" type="file" accept="image/*"><span class="hint">Up to 16 MB / 4 million pixels</span></label>
+    </div>
+    <button id="map">Map colors</button>
+    <div class="comparison"><figure><figcaption>Original</figcaption><div class="image-frame"><img id="original" alt="Selected source image" hidden><span id="original-empty">Select or upload an image</span></div></figure><figure><figcaption>Color mapped</figcaption><div class="image-frame"><img id="result" alt="Image recolored with the selected palette" hidden><span id="result-empty">Your preview will appear here</span></div></figure></div>
+    <div class="actions"><button id="map-reroll" class="secondary" disabled>Reroll mapping</button><button id="map-save" disabled>Save image</button><a id="image-download" hidden download>Download PNG ↓</a></div>
+    <p class="hint">Mapping rerolls keep the same image and palette. Some assignments may look the same.</p>
+  </section>
+</main><footer>Made with OKlab. Saved palettes and images stay in your local library.</footer>
+</body>
+</html>

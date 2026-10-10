@@ -25,7 +25,91 @@ Install the Python dependencies:
 pip install -r requirements.txt
 ```
 
-## Generate a Palette
+## GUI and REST API
+
+After installing the dependencies, start the local GUI:
+
+```bash
+python app.py
+```
+
+Open **http://127.0.0.1:5000**. Generate from a hex seed or leave it blank for
+a random seed. Adjust the palette size and OKlab steps, preview the colors,
+then **Save palette** or **Reroll seed**. Choose a palette and an existing image
+or upload one, select a mapping method, and preview the result alongside the
+original. **Reroll mapping** repeats the last mapping with a fresh randomized
+assignment; it can produce the same appearance. **Save image** keeps the result.
+Download links export palette JSON and mapped PNG files to your browser.
+
+The GUI uses a lightness step of `0.08` and chromatic steps of `0.02` initially.
+The API, like the CLI, defaults all steps to zero. A palette seed is a hex
+color, not a numeric random-generator seed.
+
+The web app resolves storage relative to `app.py` (independent of the working
+directory). Existing CLI palettes in `palettes/` and images in `inputs/` and
+`outputs/` appear automatically. Generated previews live in `.cache/web-drafts/`;
+Save copies them into `palettes/` or `outputs/`. Only saved items appear in the
+library. Uploaded images are immediately stored in `inputs/` as RGB PNGs with
+unique names. Drafts remain available by ID until you remove their files; they
+are not automatically expired. You can clear `.cache/web-drafts/` when no longer
+using previews. Saved resources survive application restarts.
+
+### REST endpoints
+
+All errors return JSON with an `error` message and an appropriate HTTP status.
+POST bodies are JSON except for image uploads. IDs are opaque; use the returned
+IDs and URLs rather than constructing filesystem paths.
+
+| Method and path | Behavior |
+| --- | --- |
+| `GET /api/palettes` | Saved palettes as `{ "palettes": [...] }`, including IDs, colors, sizes and URLs. |
+| `POST /api/palettes` | Generate a draft. Returns `201` and a JSON attachment in the **unchanged CLI format**. ID is in `X-Palette-ID`; resource URL is in `Location`. |
+| `GET /api/palettes/<id>` | Original palette JSON. Add `?download=1` for an attachment. |
+| `POST /api/palettes/<id>/save` | Save a draft's JSON and PNG preview; returns its library record. Safe to repeat. |
+| `GET /api/images` | Existing inputs and saved outputs as `{ "images": [...] }`, with IDs, names and URLs. |
+| `POST /api/images` | Upload using multipart field `image`; returns `201` and an image record. |
+| `GET /api/images/<id>` | Image bytes. Add `?download=1` for an attachment. |
+| `POST /api/mappings` | Recolor an image using a palette ID; returns `201` and a draft image record. Repeat to reroll. |
+| `POST /api/images/<id>/save` | Save a mapped draft to `outputs/`; returns its saved image record with a new ID/URL. |
+
+Palette generation body (every field is optional):
+
+```json
+{
+  "seed": "#336699",
+  "palette_size": 5,
+  "lightness_step": 0.08,
+  "green_red_step": 0.02,
+  "blue_yellow_step": 0.02
+}
+```
+
+Omit `seed`, send `null`, or send an empty string for a random seed. The response
+records the chosen seed. Palette sizes range from 1 to 256; steps must be finite
+numbers from -1 to 1. The web app accepts uploads up to 16 MiB and mapping images
+up to 4 million pixels. Large OKlab clustering jobs may take time; requests are
+synchronous. Web mapping bypasses the CLI's basename-only cache to avoid stale
+results when source images change.
+
+Mapping body (upload first and use its returned ID for a new image):
+
+```json
+{
+  "palette_id": "ID_FROM_GENERATION_OR_LIBRARY",
+  "image_id": "inputs:lenna.png",
+  "image_mapping": "oklab-clusters"
+}
+```
+
+`image_mapping` defaults to `grayscaled`. A draft palette can be used immediately
+without saving it first. The server binds to localhost without debug mode and is
+intended for local use. For tests, `create_app({"DATA_DIR": temporary_directory,
+"TESTING": True})` isolates storage.
+
+Run the automated suite with `python -m pip install pytest` followed by
+`python -m pytest -q`.
+
+## Generate a Palette (CLI)
 
 Generate a 16-color palette preview and JSON metadata:
 
