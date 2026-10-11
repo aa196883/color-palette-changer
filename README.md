@@ -49,7 +49,9 @@ color, not a numeric random-generator seed.
 
 The web app resolves storage relative to `app.py` (independent of the working
 directory). Existing CLI palettes in `palettes/` and images in `inputs/` and
-`outputs/` appear automatically. Generated previews live in `.cache/web-drafts/`;
+`outputs/` appear automatically. The mapping source selector uses eligible files
+from `inputs/` only; files over the 4-million-pixel limit are omitted. Generated
+previews live in `.cache/web-drafts/`;
 Save copies them into `palettes/` or `outputs/`. Only saved items appear in the
 library. Uploaded images are immediately stored in `inputs/` as RGB PNGs with
 unique names. Drafts remain available by ID until you remove their files; they

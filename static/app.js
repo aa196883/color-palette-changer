@@ -32,7 +32,10 @@ function options(select, items, selected, label) {
 async function refresh() {
   const [p, i] = await Promise.all([api('/api/palettes'), api('/api/images')]);
   const drafts = palettes.filter(palette => !palette.saved && !p.data.palettes.some(saved => saved.id === palette.id));
-  palettes = [...p.data.palettes, ...drafts]; images = i.data.images;
+  palettes = [...p.data.palettes, ...drafts];
+  // Only source files from inputs/ belong in the mapping selector. Saved
+  // outputs remain available through their direct URLs and API records.
+  images = i.data.images.filter(image => image.id.startsWith('inputs:'));
   if (currentPalette && !palettes.some(p => p.id === currentPalette.id)) palettes.unshift(currentPalette);
   options($('palette-select'), palettes, currentPalette?.id || $('palette-select').value, 'Choose a palette');
   options($('image-select'), images, $('image-select').value, 'Choose an image');

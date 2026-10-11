@@ -148,9 +148,9 @@ def create_app(config=None):
                 if path.is_file() and not path.is_symlink():
                     try:
                         with Image.open(path) as image:
-                            image.verify()
+                            check_image(image)
                         items.append(image_info(path, kind))
-                    except (OSError, ValueError, Image.DecompressionBombError):
+                    except (OSError, ValueError, Image.DecompressionBombError, UnidentifiedImageError):
                         continue
         return jsonify(images=items)
 
