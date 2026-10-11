@@ -27,7 +27,9 @@ def image_mapping_cache_path(cache_key: str, cache_dir: str | Path = DEFAULT_CAC
     return Path(cache_dir) / f"{cache_key}.npy"
 
 
-def load_image_mapping(cache_key: str, cache_dir: str | Path = DEFAULT_CACHE_DIR) -> np.ndarray | None:
+def load_image_mapping(
+    cache_key: str, cache_dir: str | Path = DEFAULT_CACHE_DIR
+) -> np.ndarray | np.lib.npyio.NpzFile | None:
     cache_path = image_mapping_cache_path(cache_key, cache_dir)
     if not cache_path.is_file():
         return None
@@ -42,5 +44,10 @@ def save_image_mapping(
 ) -> Path:
     cache_path = image_mapping_cache_path(cache_key, cache_dir)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    np.save(cache_path, image_map)
+    if hasattr(image_map, "labels") and hasattr(image_map, "centers"):
+        # Keep the historical filename while using a compact, non-pickle NPZ.
+        with cache_path.open("wb") as handle:
+            np.savez(handle, labels=image_map.labels, centers=image_map.centers)
+    else:
+        np.save(cache_path, image_map)
     return cache_path

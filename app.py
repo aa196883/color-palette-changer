@@ -190,8 +190,13 @@ def create_app(config=None):
         with Image.open(source) as image:
             check_image(image)
         output = folders['drafts'] / f'{uuid4().hex}.png'
-        # Avoid the CLI cache, whose basename-only key can return stale image data.
-        map_image_with_palette(source, palette, output, create_image_mapping(mode))
+        map_image_with_palette(
+            source,
+            palette,
+            output,
+            create_image_mapping(mode),
+            palette_json_path=palette_path(data['palette_id']),
+        )
         return jsonify(image_info(output, 'drafts')), 201
 
     @app.post('/api/images/<identifier>/save')

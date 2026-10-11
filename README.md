@@ -92,8 +92,8 @@ step values during generation. Omit `seed`, send `null`, or send an empty string
 records the chosen seed. Palette sizes range from 1 to 256; steps must be finite
 numbers from -1 to 1. The web app accepts uploads up to 16 MiB and mapping images
 up to 4 million pixels. Large OKlab clustering jobs may take time; requests are
-synchronous. Web mapping bypasses the CLI's basename-only cache to avoid stale
-results when source images change.
+synchronous. Web mappings use the same basename-keyed cache pipeline as the CLI,
+so repeated mappings reuse preprocessing for the same image and palette size.
 
 Mapping body (upload first and use its returned ID for a new image):
 
@@ -222,9 +222,9 @@ Both modes first build an image-dependent intermediate, then assign palette entr
 | Mode | Intermediate construction | Distance used to assign palette colors |
 | --- | --- | --- |
 | `grayscaled` (default) | Convert to Pillow grayscale and quantize each pixel with `round(gray / 255 * (N - 1))`. | Compare evenly spaced grayscale reference colors to palette colors using OKlab `L` only when palette lightness varies; otherwise use all three OKlab coordinates. |
-| `oklab-clusters` | Convert pixels to OKlab and run deterministic k-means, with up to `N` clusters, limited by the number of unique colors. | Squared Euclidean distance between each cluster center and palette colors in OKlab. |
+| `oklab-clusters` | Convert pixels to OKlab, quantize nearby colors, then run deterministic weighted k-means over unique colors, with up to `N` clusters. | Squared Euclidean distance between each cluster center and palette colors in OKlab. |
 
-K-means starts from evenly spaced indices in the sorted unique OKlab colors, uses at most 20 iterations, and stops early when labels stop changing. Its initialization does not use randomness.
+K-means starts from evenly spaced indices in the sorted, quantized unique OKlab colors, weights each color by its pixel frequency, uses at most 20 iterations, and stops early when labels stop changing. Its initialization does not use randomness.
 
 **Randomness enters during palette assignment in both modes.** The mapper visits labels in a random permutation. Each label greedily claims the nearest remaining palette entry, removing that entry from consideration for later labels. When labels compete for the same entry, changing the visit order can change the result. This enforces distinct palette indices per label, although duplicate RGB entries may still look identical. It is not a global minimum-distance assignment and does not guarantee brightness ordering.
 
@@ -244,7 +244,7 @@ The input extension is retained. Characters outside `A-Z`, `a-z`, `0-9`, `_`, `.
 | Mode | Stored NumPy array | Contents |
 | --- | --- | --- |
 | `grayscaled` | `(height, width)`, `uint8` for up to 256 entries, otherwise `int32` | Quantized grayscale labels, before palette assignment. |
-| `oklab-clusters` | `(height, width, 4)`, `float32` | Cluster label in channel 0 and that cluster's OKlab center `(L, a, b)` in channels 1–3, repeated for each pixel. A one-color palette stores zeros. |
+| `oklab-clusters` | NPZ with `labels` and `centers` arrays | One integer cluster label per pixel and one OKlab center per cluster. Nearby colors are quantized at `1/256` before clustering. |
 
 On a cache miss, the image is decoded and the intermediate is computed and saved. On a hit, that intermediate is loaded with `allow_pickle=False`, skipping image decoding and preprocessing, including expensive clustering. Palette assignment and RGB output are performed anew on every call. Neither the final color assignment nor the recolored image is stored in this cache.
 

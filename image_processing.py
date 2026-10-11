@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,21 @@ from image_mapping_cache import image_mapping_cache_key, load_image_mapping, sav
 from oklab import rgb_array_to_oklab
 from palette import Pallette
 from palette_generation import hex_to_rgb
+
+
+# Quantizing in OKlab merges colors that are visually indistinguishable before
+# clustering.  Keeping this at module scope makes the speed/precision tradeoff
+# explicit and easy to tune.
+OKLAB_COLOR_QUANTIZATION = 1 / 256
+
+
+@dataclass(frozen=True)
+class OKlabClusterIntermediate:
+    labels: np.ndarray
+    centers: np.ndarray
+
+    def copy(self) -> "OKlabClusterIntermediate":
+        return OKlabClusterIntermediate(self.labels.copy(), self.centers.copy())
 
 
 class ImageMapping(ABC):
@@ -74,35 +90,39 @@ class OKlabClustersImageMapping(ImageMapping):
 
         self.max_iterations = max_iterations
 
-    def create_intermediate_map(self, image: Image.Image, palette_size: int) -> np.ndarray:
+    def create_intermediate_map(self, image: Image.Image, palette_size: int) -> OKlabClusterIntermediate:
         rgb_values = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
         height, width = rgb_values.shape[:2]
         if palette_size == 1:
-            return np.zeros((height, width, 4), dtype=np.float32)
+            return OKlabClusterIntermediate(
+                labels=np.zeros((height, width), dtype=np.uint8),
+                centers=np.zeros((1, 3), dtype=np.float32),
+            )
 
         oklab_points = rgb_array_to_oklab(rgb_values).reshape(-1, 3)
-        cluster_count = min(palette_size, len(np.unique(oklab_points, axis=0)))
+        quantized_points = np.round(oklab_points / OKLAB_COLOR_QUANTIZATION) * OKLAB_COLOR_QUANTIZATION
+        unique_points, inverse, counts = np.unique(
+            quantized_points, axis=0, return_inverse=True, return_counts=True
+        )
+        cluster_count = min(palette_size, len(unique_points))
         if cluster_count == 1:
-            intermediate_map = np.zeros((height * width, 4), dtype=np.float32)
-            intermediate_map[:, 1:] = oklab_points[0]
-            return intermediate_map.reshape(height, width, 4)
+            return OKlabClusterIntermediate(
+                labels=np.zeros((height, width), dtype=np.uint8),
+                centers=unique_points.astype(np.float32),
+            )
 
-        labels, centers = _k_means(oklab_points, cluster_count, self.max_iterations)
-        intermediate_map = np.empty((height * width, 4), dtype=np.float32)
-        intermediate_map[:, 0] = labels
-        intermediate_map[:, 1:] = centers[labels]
-        return intermediate_map.reshape(height, width, 4)
+        unique_labels, centers = _k_means(unique_points, counts, cluster_count, self.max_iterations)
+        labels = unique_labels[inverse].reshape(height, width).astype(_image_map_dtype(palette_size))
+        return OKlabClusterIntermediate(labels=labels, centers=centers)
 
     def apply_palette_to_intermediate(self, intermediate_map: np.ndarray, palette: Pallette) -> np.ndarray:
-        if intermediate_map.ndim != 3 or intermediate_map.shape[2] != 4:
-            raise ValueError("OKlab cluster intermediate map must have shape (height, width, 4).")
-
-        height, width = intermediate_map.shape[:2]
-        labels = intermediate_map[:, :, 0].astype(np.int32).reshape(-1)
+        intermediate_map = _coerce_cluster_intermediate(intermediate_map)
+        height, width = intermediate_map.labels.shape
+        labels = intermediate_map.labels.reshape(-1).astype(np.int32)
         if palette.palette_size == 1:
             return np.zeros((height, width), dtype=np.uint8)
 
-        centers = _cluster_centers_from_intermediate(intermediate_map)
+        centers = intermediate_map.centers
         palette_rgb = np.array([hex_to_rgb(color) for color in palette.colors], dtype=np.float32) / 255
         palette_oklab = rgb_array_to_oklab(palette_rgb.reshape(1, palette.palette_size, 3)).reshape(palette.palette_size, 3)
         labels = _map_cluster_labels_to_palette_indices(labels, centers, palette_oklab)
@@ -128,7 +148,12 @@ def image_map_to_grayscale(image_map: np.ndarray) -> Image.Image:
     return Image.fromarray(scaled, mode="L")
 
 
-def _k_means(points: np.ndarray, cluster_count: int, max_iterations: int) -> tuple[np.ndarray, np.ndarray]:
+def _k_means(
+    points: np.ndarray,
+    weights: np.ndarray,
+    cluster_count: int,
+    max_iterations: int,
+) -> tuple[np.ndarray, np.ndarray]:
     centers = _initial_cluster_centers(points, cluster_count)
     labels: np.ndarray | None = None
 
@@ -139,9 +164,9 @@ def _k_means(points: np.ndarray, cluster_count: int, max_iterations: int) -> tup
         new_centers = centers.copy()
         nearest_distances = distances[np.arange(len(points)), new_labels]
         for cluster_id in range(cluster_count):
-            cluster_points = points[new_labels == cluster_id]
-            if len(cluster_points) > 0:
-                new_centers[cluster_id] = cluster_points.mean(axis=0)
+            members = new_labels == cluster_id
+            if np.any(members):
+                new_centers[cluster_id] = np.average(points[members], axis=0, weights=weights[members])
             else:
                 new_centers[cluster_id] = points[np.argmax(nearest_distances)]
 
@@ -176,19 +201,12 @@ def _map_cluster_labels_to_palette_indices(
     return cluster_to_palette[labels]
 
 
-def _cluster_centers_from_intermediate(intermediate_map: np.ndarray) -> np.ndarray:
-    labels = intermediate_map[:, :, 0].astype(np.int32).reshape(-1)
-    pixel_centers = intermediate_map[:, :, 1:].reshape(-1, 3)
-    cluster_count = int(labels.max(initial=0)) + 1
-    centers = np.zeros((cluster_count, 3), dtype=np.float32)
-
-    for label in range(cluster_count):
-        matches = np.flatnonzero(labels == label)
-        if len(matches) == 0:
-            raise ValueError("OKlab cluster intermediate map contains a missing cluster label.")
-        centers[label] = pixel_centers[matches[0]]
-
-    return centers
+def _coerce_cluster_intermediate(intermediate_map: object) -> OKlabClusterIntermediate:
+    if isinstance(intermediate_map, OKlabClusterIntermediate):
+        return intermediate_map
+    if isinstance(intermediate_map, np.lib.npyio.NpzFile):
+        return OKlabClusterIntermediate(intermediate_map["labels"], intermediate_map["centers"])
+    raise ValueError("Invalid OKlab cluster intermediate map.")
 
 
 def _map_grayscale_labels_to_palette_indices(
@@ -229,12 +247,11 @@ def _has_varying_lightness(palette_points: np.ndarray) -> bool:
 
 
 def _initial_cluster_centers(points: np.ndarray, cluster_count: int) -> np.ndarray:
-    unique_points = np.unique(points, axis=0)
-    if cluster_count == len(unique_points):
-        return unique_points.astype(np.float32)
+    if cluster_count == len(points):
+        return points.astype(np.float32).copy()
 
-    center_indices = np.linspace(0, len(unique_points) - 1, cluster_count, dtype=np.int32)
-    return unique_points[center_indices].astype(np.float32)
+    center_indices = np.linspace(0, len(points) - 1, cluster_count, dtype=np.int32)
+    return points[center_indices].astype(np.float32).copy()
 
 
 def _image_map_dtype(palette_size: int) -> np.dtype:
