@@ -50,7 +50,8 @@ The web interface runs at `http://127.0.0.1:5000`. For isolated web tests, use
   the full-span axis, normalized slope m in [-1, 1], and intercept c in
   [-(1 - abs(m)), 1 - abs(m)]. The line need not pass through neutral.
   Use the N interior boundaries of N + 1 equal segments; ignore step options.
-  The web interface retains analogous generation. JSON stores final colors but
+  The web interface and API support both modes, defaulting to analogous; the
+  UI disables step fields for complementary. JSON stores final colors but
   does not record the complementary mode or random line parameters.
 - CLI/API steps default to zero; the GUI initially uses lightness `0.08` and
   chromatic steps `0.02`. Clip out-of-gamut RGB channels and retain duplicate

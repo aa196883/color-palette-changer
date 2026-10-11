@@ -102,6 +102,9 @@ def create_app(config=None):
     @app.post('/api/palettes')
     def new_palette():
         data = body()
+        mode = data.get('mode', 'analogous')
+        if mode not in ('analogous', 'complementary'):
+            raise ValueError('mode must be analogous or complementary.')
         size = data.get('palette_size', 5)
         if type(size) is not int or not 1 <= size <= 256:
             raise ValueError('palette_size must be an integer between 1 and 256.')
@@ -115,7 +118,7 @@ def create_app(config=None):
             if type(value) not in (int, float) or not math.isfinite(value) or abs(value) > 1:
                 raise ValueError(f'{name} must be a finite number between -1 and 1.')
             steps[name] = value
-        colors = generate_palette(seed_color=seed, palette_size=size, **steps)
+        colors = generate_palette(seed_color=seed, palette_size=size, mode=mode, **steps)
         identifier = uuid4().hex
         _, path = save_palette_outputs(colors, seed, size, folders['drafts'] / f'{identifier}.png', **steps)
         response = send_file(path, mimetype='application/json', as_attachment=True)

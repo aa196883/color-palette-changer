@@ -34,7 +34,9 @@ python app.py
 ```
 
 Open **http://127.0.0.1:5000**. Generate from a hex seed or leave it blank for
-a random seed. Adjust the palette size and OKlab steps, preview the colors,
+a random seed. Choose Analogous or Complementary generation and adjust the
+palette size. Analogous uses the OKlab steps; Complementary disables them and
+uses seed lightness with a new random line each time. Preview the colors,
 then **Save palette** or **Reroll seed**. Choose a palette and an existing image
 or upload one, select a mapping method, and preview the result alongside the
 original. **Reroll mapping** repeats the last mapping with a fresh randomized
@@ -76,6 +78,7 @@ Palette generation body (every field is optional):
 
 ```json
 {
+  "mode": "analogous",
   "seed": "#336699",
   "palette_size": 5,
   "lightness_step": 0.08,
@@ -84,7 +87,8 @@ Palette generation body (every field is optional):
 }
 ```
 
-Omit `seed`, send `null`, or send an empty string for a random seed. The response
+`mode` accepts `analogous` (default) or `complementary`. Complementary ignores
+step values during generation. Omit `seed`, send `null`, or send an empty string for a random seed. The response
 records the chosen seed. Palette sizes range from 1 to 256; steps must be finite
 numbers from -1 to 1. The web app accepts uploads up to 16 MiB and mapping images
 up to 4 million pixels. Large OKlab clustering jobs may take time; requests are
@@ -128,7 +132,7 @@ You can also provide a fixed seed color:
 python main.py --generate-palette -c "#336699" -L 0.0 -a 0.1 -b 0.0 -p 10 -o palettes/blue_ramp.png
 ```
 
-### Complementary Line Mode (CLI)
+### Complementary Line Mode
 
 `--mode analogous` is the default and preserves the existing seed-and-step
 generation. Use `--mode complementary` to sample a randomly offset straight line
@@ -155,8 +159,8 @@ The `-L`, `-a`, and `-b` step options are ignored in complementary mode. The
 axis, slope, and origin are randomized on each call, even with a fixed seed color. Existing
 RGB clipping still applies and can distort spacing or create duplicates.
 This straight-line method does not guarantee a triadic or square
-arrangement around a hue circle. The web interface continues to use analogous
-generation.
+arrangement around a hue circle. In the web interface, select Complementary
+under Generation mode; Analogous remains the default.
 
 PNG and JSON exports remain compatible with existing mappers. The JSON stores
 the resulting colors in the existing schema; it does not record the random

@@ -63,9 +63,10 @@ def test_random_seed_is_recorded(client, monkeypatch):
     assert data['seed'] == '#abcdef'
 
 
+@pytest.mark.parametrize('generation_mode', ['analogous', 'complementary'])
 @pytest.mark.parametrize('mode', ['grayscaled', 'oklab-clusters'])
-def test_upload_map_reroll_save_and_retrieve(client, tmp_path, mode):
-    identifier, palette = generate(client, seed='#336699', palette_size=3, lightness_step=0.2)
+def test_upload_map_reroll_save_and_retrieve(client, tmp_path, mode, generation_mode):
+    identifier, palette = generate(client, seed='#336699', palette_size=3, lightness_step=0.2, mode=generation_mode)
     source = upload(client)
     payload = {'palette_id': identifier, 'image_id': source['id'], 'image_mapping': mode}
     first = client.post('/api/mappings', json=payload)
@@ -93,11 +94,29 @@ def test_upload_map_reroll_save_and_retrieve(client, tmp_path, mode):
 
 @pytest.mark.parametrize('payload', [[], None, {'seed': 5}, {'seed': 'bad'},
     {'palette_size': True}, {'palette_size': 0}, {'palette_size': 257},
-    {'lightness_step': 'bad'}, {'lightness_step': float('inf')}, {'blue_yellow_step': 2}])
+    {'lightness_step': 'bad'}, {'lightness_step': float('inf')}, {'blue_yellow_step': 2},
+    {'mode': 'unknown'}, {'mode': None}, {'mode': []}, {'mode': 1}])
 def test_bad_palette_requests(client, payload):
     response = client.post('/api/palettes', data=json.dumps(payload), content_type='application/json')
     assert response.status_code == 400
     assert 'error' in response.json
+
+
+def test_complementary_generation_save_and_reroll(client, monkeypatch):
+    monkeypatch.setattr('palette_generation.random.choice', lambda choices: 'a')
+    monkeypatch.setattr('palette_generation.random.uniform', lambda low, high: (low + high) / 2)
+    identifier, data = generate(client, mode='complementary', seed='#336699', palette_size=4)
+    assert data['colors'] == generate_palette('#336699', palette_size=4, mode='complementary')
+    assert len(set(data['colors'])) > 1
+    saved = client.post(f'/api/palettes/{identifier}/save')
+    assert saved.status_code == 200 and saved.json['saved']
+    response = client.get(f'/api/palettes/{identifier}?download=1')
+    assert response.json == data
+    response.close()
+
+    monkeypatch.setattr('palette_generation.random.choice', lambda choices: 'b')
+    _, rerolled = generate(client, mode='complementary', seed='#336699', palette_size=4)
+    assert rerolled['colors'] != data['colors']
 
 
 def test_invalid_upload_and_mapping(client):

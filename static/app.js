@@ -49,14 +49,28 @@ function showPalette(data, id, saved = false) {
   $('palette-download').hidden = false;
 }
 async function generate(reroll) {
+  const mode = $('generation-mode').value;
   const {data, response} = await api('/api/palettes', post({
+    mode,
     seed: reroll ? null : $('seed').value.trim() || null,
-    palette_size: Number($('size').value), lightness_step: Number($('lightness').value),
-    green_red_step: Number($('red').value), blue_yellow_step: Number($('yellow').value)
+    palette_size: Number($('size').value),
+    ...(mode === 'analogous' ? {
+      lightness_step: Number($('lightness').value),
+      green_red_step: Number($('red').value), blue_yellow_step: Number($('yellow').value)
+    } : {})
   }));
   showPalette(data, response.headers.get('X-Palette-ID'));
   await refresh(); status('Palette ready. Save it to your library or reroll the seed.');
 }
+function updateGenerationMode() {
+  const complementary = $('generation-mode').value === 'complementary';
+  ['lightness', 'red', 'yellow'].forEach(id => { $(id).disabled = complementary; });
+  $('generation-help').textContent = complementary
+    ? 'Complementary uses seed lightness and a new random line on each generation. Step values are ignored.'
+    : 'Analogous uses the seed color and step values.';
+}
+$('generation-mode').addEventListener('change', updateGenerationMode);
+updateGenerationMode();
 $('generate-form').addEventListener('submit', event => {event.preventDefault(); run(() => generate(false));});
 $('palette-reroll').onclick = () => run(() => generate(true));
 $('palette-save').onclick = () => run(async () => {
