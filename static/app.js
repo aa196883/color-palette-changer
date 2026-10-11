@@ -29,6 +29,34 @@ function options(select, items, selected, label) {
   items.forEach(item => select.add(new Option(item.name || `${item.palette_size} colors · ${item.id}`, item.id)));
   select.value = selected || '';
 }
+function renderPaletteSnapshots(selectedId) {
+  const container = $('palette-snapshots');
+  container.replaceChildren();
+  if (!palettes.length) {
+    const empty = document.createElement('p'); empty.className = 'hint'; empty.textContent = 'No saved palettes.';
+    container.append(empty); return;
+  }
+  palettes.forEach(palette => {
+    const option = document.createElement('button');
+    option.type = 'button'; option.className = 'palette-snapshot';
+    option.dataset.paletteId = palette.id; option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', String(palette.id === selectedId));
+    if (palette.id === selectedId) option.classList.add('selected');
+    const strip = document.createElement('span'); strip.className = 'palette-snapshot-colors';
+    palette.colors.forEach(color => {
+      const swatch = document.createElement('span'); swatch.style.backgroundColor = color; swatch.title = color;
+      strip.append(swatch);
+    });
+    const name = document.createElement('strong'); name.textContent = palette.name || palette.id;
+    const size = document.createElement('small'); size.textContent = `${palette.palette_size} colors`;
+    option.append(strip, name, size);
+    option.onclick = () => {
+      $('palette-select').value = palette.id;
+      $('palette-select').dispatchEvent(new Event('change'));
+    };
+    container.append(option);
+  });
+}
 async function refresh() {
   const [p, i] = await Promise.all([api('/api/palettes'), api('/api/images')]);
   const drafts = palettes.filter(palette => !palette.saved && !p.data.palettes.some(saved => saved.id === palette.id));
@@ -37,11 +65,15 @@ async function refresh() {
   // outputs remain available through their direct URLs and API records.
   images = i.data.images.filter(image => image.id.startsWith('inputs:'));
   if (currentPalette && !palettes.some(p => p.id === currentPalette.id)) palettes.unshift(currentPalette);
-  options($('palette-select'), palettes, currentPalette?.id || $('palette-select').value, 'Choose a palette');
+  const selectedPalette = currentPalette?.id || $('palette-select').value;
+  options($('palette-select'), palettes, selectedPalette, 'Choose a palette');
+  renderPaletteSnapshots(selectedPalette);
   options($('image-select'), images, $('image-select').value, 'Choose an image');
 }
 function showPalette(data, id, saved = false) {
   currentPalette = {...data, id, saved};
+  $('palette-select').value = id;
+  renderPaletteSnapshots(id);
   $('swatches').replaceChildren();
   data.colors.forEach(color => {
     const swatch = document.createElement('div'); swatch.className = 'swatch'; swatch.style.backgroundColor = color;

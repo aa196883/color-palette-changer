@@ -32,7 +32,12 @@
   <section>
     <div class="heading"><span class="number">02</span><h2>Map image</h2></div>
     <div class="fields mapping-fields">
-      <label>Palette<select id="palette-select"><option value="">Choose a palette</option></select></label>
+      <label class="palette-choice">Palette
+        <select id="palette-select" hidden><option value="">Choose a palette</option></select>
+        <div id="palette-snapshots" class="palette-snapshots" role="listbox" aria-label="Available palettes">
+          <p class="hint">No saved palettes.</p>
+        </div>
+      </label>
       <label>Existing image<select id="image-select"><option value="">Choose an image</option></select></label>
       <label>Mapping<select id="mode"><option value="grayscaled">Brightness levels</option><option value="oklab-clusters">OKlab clusters</option></select></label>
       <label class="upload">Or upload an image<input id="upload" type="file" accept="image/*"><span class="hint">Up to 16 MB / 4 million pixels</span></label>
