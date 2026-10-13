@@ -261,7 +261,7 @@ Delete the corresponding `.cache/*.npy` file, or clear `.cache/`, to force prepr
 ## Command Reference
 
 ```text
-python main.py (--generate-palette | --map) [options]
+python main.py (--generate-palette | --palette_augmentation | --map) [options]
 ```
 
 Palette generation options:
@@ -273,6 +273,21 @@ Palette generation options:
 - `-b`, `--blue-yellow-step`: OKlab `b` channel step.
 - `-p`, `--palette-size`: number of colors to generate (default: 5).
 - `-o`, `--output`: output PNG path (default: `palettes/palette.png`). A same-name JSON file is written beside it.
+
+Palette augmentation options:
+
+```sh
+python main.py --palette_augmentation --palette palettes/complementary_2.json -f 4
+```
+
+`--palette_augmentation` expands each color in the input palette into an
+analogous sub-palette of size `f`, preserving the input order and producing
+`palette_size × f` colors. The `-L`, `-a`, and `-b` options may provide shared
+OKlab steps. Omitted steps are sampled once from a small range scaled by `f`,
+so every source color receives the same coherent offsets. The default output is
+`palettes/{input_stem}--augmented-{f}.png`, with matching JSON metadata.
+
+Use `-f` (or `--augmentation-factor`) to set `f`; it must be at least 1.
 
 Image mapping options:
 

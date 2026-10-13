@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from image_processing import DEFAULT_IMAGE_MAPPING_NAME, create_image_mapping, image_mapping_names, map_image_with_palette
-from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
+from palette_generation import augment_palette, generate_palette, generate_random_hex_color, normalize_hex_color
 from utils import load_palette_json, save_palette_outputs
 
 
@@ -15,6 +15,16 @@ def positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be at least 1")
     return parsed
+
+
+class StepArgumentAction(argparse.Action):
+    """Keep the legacy zero defaults while recording explicit step options."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        provided = getattr(namespace, "_provided_steps", set())
+        provided.add(self.dest)
+        setattr(namespace, "_provided_steps", provided)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
             "a/b line at the seed lightness and ignores -L, -a, and -b."
         ),
     )
+    mode.add_argument(
+        "--palette_augmentation",
+        "--palette-augmentation",
+        action="store_true",
+        help="Augment every color in a palette with a small analogous sub-palette.",
+    )
     parser.add_argument(
         "-c",
         "--colors",
@@ -63,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--lightness-step",
         type=float,
         default=0.0,
+        action=StepArgumentAction,
         help="OKlab L step between neighboring colors.",
     )
     parser.add_argument(
@@ -70,6 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--green-red-step",
         type=float,
         default=0.0,
+        action=StepArgumentAction,
         help="OKlab a step between neighboring colors. May be negative.",
     )
     parser.add_argument(
@@ -77,7 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--blue-yellow-step",
         type=float,
         default=0.0,
+        action=StepArgumentAction,
         help="OKlab b step between neighboring colors. May be negative.",
+    )
+    parser.add_argument(
+        "-f",
+        "--augmentation-factor",
+        "--factor",
+        type=positive_int,
+        default=None,
+        help="Number of nearby colors generated for each source color with --palette_augmentation.",
     )
     parser.add_argument(
         "-p",
@@ -164,6 +191,45 @@ def generate_palette_command(args: argparse.Namespace, parser: argparse.Argument
         print(f"Color palette generated = {palette}. Saved to {image_path} and {json_path}")
 
 
+def augment_palette_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.palette is None:
+        parser.error("--palette_augmentation requires --palette")
+    if args.augmentation_factor is None:
+        parser.error("--palette_augmentation requires --augmentation-factor")
+    if not args.palette.is_file():
+        parser.error(f"palette missing: {args.palette}")
+
+    try:
+        source = load_palette_json(args.palette)
+        provided_steps = getattr(args, "_provided_steps", set())
+        augmented, steps = augment_palette(
+            source.colors,
+            args.augmentation_factor,
+            lightness_step=args.lightness_step if "lightness_step" in provided_steps else None,
+            green_red_step=args.green_red_step if "green_red_step" in provided_steps else None,
+            blue_yellow_step=args.blue_yellow_step if "blue_yellow_step" in provided_steps else None,
+        )
+        output_path = args.output or Path("palettes") / f"{args.palette.stem}--augmented-{args.augmentation_factor}.png"
+        image_path, json_path = save_palette_outputs(
+            palette=augmented,
+            seed_color=source.colors[0],
+            palette_size=len(augmented),
+            output_path=output_path,
+            lightness_step=steps[0],
+            green_red_step=steps[1],
+            blue_yellow_step=steps[2],
+        )
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+
+    if args.verbose:
+        print(
+            f"Augmented {args.palette} by factor {args.augmentation_factor}; "
+            f"steps L={steps[0]}, a={steps[1]}, b={steps[2]}. "
+            f"Saved to {image_path} and {json_path}"
+        )
+
+
 def default_mapped_output_path(input_image: Path, palette: Path, image_mapping: str) -> Path:
     return Path("outputs") / f"{input_image.stem}--{palette.stem}--{image_mapping}.png"
 
@@ -206,6 +272,8 @@ def main() -> None:
 
     if args.generate_palette:
         generate_palette_command(args, parser)
+    elif args.palette_augmentation:
+        augment_palette_command(args, parser)
     elif args.map:
         map_command(args, parser)
 

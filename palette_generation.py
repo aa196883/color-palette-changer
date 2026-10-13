@@ -11,6 +11,7 @@ from oklab import oklab_to_rgb, rgb_to_oklab
 HEX_COLOR_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
 # Working a/b square, not a promise that its samples are in the sRGB gamut.
 COMPLEMENTARY_AXIS_LIMIT = 0.4
+AUGMENTATION_MAX_SPAN = 0.15
 
 
 def generate_random_hex_color() -> str:
@@ -94,3 +95,40 @@ def generate_palette(
     ]
 
     return [_float_rgb_to_hex(oklab_to_rgb(value)) for value in oklab_values]
+
+
+def augment_palette(
+    colors: list[str] | tuple[str, ...],
+    factor: int,
+    lightness_step: float | None = None,
+    green_red_step: float | None = None,
+    blue_yellow_step: float | None = None,
+) -> tuple[list[str], tuple[float, float, float]]:
+    """Expand every source color into one coherent analogous sub-palette.
+
+    Missing steps are sampled once for the whole operation. Their range is
+    scaled by the factor so the span of each sub-palette remains bounded.
+    """
+    if factor < 1:
+        raise ValueError("Augmentation factor must be at least 1.")
+    if not colors:
+        raise ValueError("Palette must contain at least one color.")
+    normalized_colors = [normalize_hex_color(color) for color in colors]
+    maximum_step = AUGMENTATION_MAX_SPAN / max(factor - 1, 1)
+    steps = tuple(
+        value if value is not None else random.uniform(-maximum_step, maximum_step)
+        for value in (lightness_step, green_red_step, blue_yellow_step)
+    )
+    augmented = []
+    for color in normalized_colors:
+        augmented.extend(
+            generate_palette(
+                seed_color=color,
+                lightness_step=steps[0],
+                green_red_step=steps[1],
+                blue_yellow_step=steps[2],
+                palette_size=factor,
+                mode="analogous",
+            )
+        )
+    return augmented, steps
