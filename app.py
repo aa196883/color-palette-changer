@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -12,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 
 from image_processing import create_image_mapping, map_image_with_palette
 from openapi import openapi_document
-from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
+from palette_generation import augment_palette, generate_palette, generate_random_hex_color, normalize_hex_color
 from utils import load_palette_json, save_palette_outputs
 
 
@@ -68,6 +69,22 @@ def create_app(config=None):
         if not isinstance(data, dict):
             abort(400, description='Expected a JSON object.')
         return data
+
+    def optional_save_name():
+        data = request.get_json(silent=True)
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            abort(400, description='Expected a JSON object.')
+        name = data.get('name')
+        if name is None:
+            return None
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError('name must be a non-empty string.')
+        name = re.sub(r'\s+', '_', name.strip())
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', name):
+            raise ValueError('name may contain only letters, numbers, spaces, dots, underscores, and hyphens.')
+        return name.removesuffix('.json')
 
     def check_image(image):
         if image.width * image.height > app.config['MAX_IMAGE_PIXELS']:
@@ -141,10 +158,40 @@ def create_app(config=None):
     @app.post('/api/palettes/<identifier>/save')
     def save_palette(identifier):
         path = palette_path(identifier)
-        if path.parent != folders['palettes']:
-            shutil.copy2(path, folders['palettes'] / path.name)
-            shutil.copy2(path.with_suffix('.png'), folders['palettes'] / f'{identifier}.png')
-        return jsonify(palette_info(folders['palettes'] / path.name))
+        name = optional_save_name() or identifier
+        target_json = folders['palettes'] / f'{name}.json'
+        target_png = folders['palettes'] / f'{name}.png'
+        if path.parent != folders['palettes'] or path != target_json:
+            shutil.copy2(path, target_json)
+            shutil.copy2(path.with_suffix('.png'), target_png)
+        return jsonify(palette_info(target_json))
+
+    @app.post('/api/palettes/<identifier>/augment')
+    def augment_palette_route(identifier):
+        data = body()
+        factor = data.get('factor')
+        if type(factor) is not int or factor < 1:
+            raise ValueError('factor must be an integer of at least 1.')
+        source = load_palette_json(palette_path(identifier))
+        if source.palette_size * factor > 256:
+            raise ValueError('Augmented palette cannot contain more than 256 colors.')
+        steps = {}
+        for name in ('lightness_step', 'green_red_step', 'blue_yellow_step'):
+            value = data.get(name)
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or abs(value) > 1):
+                raise ValueError(f'{name} must be a finite number between -1 and 1.')
+            steps[name] = value
+        colors, chosen_steps = augment_palette(source.colors, factor, **steps)
+        identifier = uuid4().hex
+        _, path = save_palette_outputs(
+            colors, source.colors[0], len(colors), folders['drafts'] / f'{identifier}.png',
+            lightness_step=chosen_steps[0], green_red_step=chosen_steps[1], blue_yellow_step=chosen_steps[2],
+        )
+        response = send_file(path, mimetype='application/json', as_attachment=True)
+        response.status_code = 201
+        response.headers['Location'] = url_for('get_palette', identifier=identifier)
+        response.headers['X-Palette-ID'] = identifier
+        return response
 
     @app.get('/api/images')
     def list_images():
@@ -218,4 +265,11 @@ def create_app(config=None):
 
 
 if __name__ == '__main__':
-    create_app().run(host='127.0.0.1', port=5000)
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Run the local color palette web application.')
+    parser.add_argument('--port', type=int, default=5000, help='Port to listen on (default: 5000).')
+    arguments = parser.parse_args()
+    if not 1 <= arguments.port <= 65535:
+        parser.error('port must be between 1 and 65535')
+    create_app().run(host='127.0.0.1', port=arguments.port)

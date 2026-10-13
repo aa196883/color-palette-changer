@@ -43,6 +43,10 @@ original. **Reroll mapping** repeats the last mapping with a fresh randomized
 assignment; it can produce the same appearance. **Save image** keeps the result.
 Download links export palette JSON and mapped PNG files to your browser.
 
+The augmentation section expands any available palette into coherent analogous
+sub-palettes, previews the result, and lets you reroll, name, save, and use it
+immediately in image mapping.
+
 The GUI uses a lightness step of `0.08` and chromatic steps of `0.02` initially.
 The API, like the CLI, defaults all steps to zero. A palette seed is a hex
 color, not a numeric random-generator seed.
@@ -74,7 +78,8 @@ and documented error responses.
 | `GET /api/palettes` | Saved palettes as `{ "palettes": [...] }`, including IDs, colors, sizes and URLs. |
 | `POST /api/palettes` | Generate a draft. Returns `201` and a JSON attachment in the **unchanged CLI format**. ID is in `X-Palette-ID`; resource URL is in `Location`. |
 | `GET /api/palettes/<id>` | Original palette JSON. Add `?download=1` for an attachment. |
-| `POST /api/palettes/<id>/save` | Save a draft's JSON and PNG preview; returns its library record. Safe to repeat. |
+| `POST /api/palettes/<id>/save` | Save a draft's JSON and PNG preview; accepts optional `{ "name": "sunset" }` to choose the saved filename stem. |
+| `POST /api/palettes/<id>/augment` | Create an augmented palette draft from a source palette using `{ "factor": 4 }` and optional shared OKlab steps. |
 | `GET /api/images` | Existing inputs and saved outputs as `{ "images": [...] }`, with IDs, names and URLs. |
 | `POST /api/images` | Upload using multipart field `image`; returns `201` and an image record. |
 | `GET /api/images/<id>` | Image bytes. Add `?download=1` for an attachment. |
@@ -101,6 +106,9 @@ numbers from -1 to 1. The web app accepts uploads up to 16 MiB and mapping image
 up to 4 million pixels. Large OKlab clustering jobs may take time; requests are
 synchronous. Web mappings use the same basename-keyed cache pipeline as the CLI,
 so repeated mappings reuse preprocessing for the same image and palette size.
+
+Run the web app on the default port with `python app.py`, or choose one with
+`python app.py --port 5050`.
 
 Mapping body (upload first and use its returned ID for a new image):
 

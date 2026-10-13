@@ -88,7 +88,16 @@ def openapi_document() -> dict:
                 "parameters": [{"$ref": "#/components/parameters/PaletteId"}],
                 "post": {
                     "summary": "Save a palette draft to the library",
+                    "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/SaveNameRequest"}}}},
                     "responses": {"200": {"description": "Saved palette", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PaletteRecord"}}}}, "404": {"$ref": "#/components/responses/NotFound"}},
+                },
+            },
+            "/api/palettes/{id}/augment": {
+                "parameters": [{"$ref": "#/components/parameters/PaletteId"}],
+                "post": {
+                    "summary": "Create an augmented palette draft",
+                    "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AugmentationRequest"}}}},
+                    "responses": {"201": {"description": "Augmented palette JSON", "headers": {"Location": {"schema": {"type": "string"}}, "X-Palette-ID": {"schema": {"type": "string"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Palette"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "404": {"$ref": "#/components/responses/NotFound"}},
                 },
             },
             "/api/images": {
@@ -137,6 +146,8 @@ def openapi_document() -> dict:
                 "ImageRecord": image_record,
                 "PaletteGenerationRequest": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["analogous", "complementary"], "default": "analogous"}, "seed": {"type": "string", "nullable": True}, "palette_size": {"type": "integer", "minimum": 1, "maximum": 256, "default": 5}, "lightness_step": {"type": "number", "minimum": -1, "maximum": 1}, "green_red_step": {"type": "number", "minimum": -1, "maximum": 1}, "blue_yellow_step": {"type": "number", "minimum": -1, "maximum": 1}}},
                 "MappingRequest": {"type": "object", "required": ["palette_id", "image_id"], "properties": {"palette_id": {"type": "string"}, "image_id": {"type": "string", "example": "inputs:lenna.png"}, "image_mapping": {"type": "string", "enum": ["grayscaled", "oklab-clusters"], "default": "grayscaled"}}},
+                "SaveNameRequest": {"type": "object", "properties": {"name": {"type": "string", "description": "Optional filename stem for the saved palette."}}},
+                "AugmentationRequest": {"type": "object", "required": ["factor"], "properties": {"factor": {"type": "integer", "minimum": 1, "maximum": 256}, "lightness_step": {"type": "number", "minimum": -1, "maximum": 1}, "green_red_step": {"type": "number", "minimum": -1, "maximum": 1}, "blue_yellow_step": {"type": "number", "minimum": -1, "maximum": 1}}},
                 "Error": error,
             },
             "responses": {

@@ -3,3 +3,9 @@
 input:disabled{opacity:.45;cursor:not-allowed}@media(min-width:721px){#generate-form .fields{grid-template-columns:repeat(3,minmax(0,1fr))}}
 :root{font-family:Inter,Segoe UI,sans-serif;color:#292d29;background:#f5f4ef;font-synthesis:none}
  .palette-choice{grid-column:span 2}.palette-snapshots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:190px;overflow-y:auto;padding:2px}.palette-snapshot{display:flex;flex-direction:column;gap:5px;min-width:0;padding:7px;background:#fafbf8;color:#292d29;border:1px solid #dce1d5;text-align:left}.palette-snapshot:hover{filter:none;border-color:#889f71}.palette-snapshot.selected{border:2px solid #35482e;padding:6px}.palette-snapshot-colors{display:flex;height:28px;width:100%;border-radius:4px;overflow:hidden}.palette-snapshot-colors span{flex:1;min-width:0}.palette-snapshot strong,.palette-snapshot small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.palette-snapshot small{font-size:11px;color:#777e71;font-weight:400}
+.augmentation-fields{grid-template-columns:repeat(4,minmax(0,1fr))}.palette-name{max-width:440px;margin:14px 0}
+.augmentation-picker{margin-bottom:20px;min-width:0}
+.field-label{display:block;font-size:12px;font-weight:600;margin-bottom:8px}
+.palette-snapshots{grid-auto-rows:max-content;scrollbar-gutter:stable}
+.palette-snapshot-colors{flex-shrink:0}
+.palette-snapshot strong,.palette-snapshot small{max-width:100%}
