@@ -64,6 +64,11 @@ All errors return JSON with an `error` message and an appropriate HTTP status.
 POST bodies are JSON except for image uploads. IDs are opaque; use the returned
 IDs and URLs rather than constructing filesystem paths.
 
+The machine-readable OpenAPI 3.0 contract is available at
+`GET /openapi.json` (also served at `/api/openapi.json`). It describes the
+request bodies, response schemas, path parameters, download query parameter,
+and documented error responses.
+
 | Method and path | Behavior |
 | --- | --- |
 | `GET /api/palettes` | Saved palettes as `{ "palettes": [...] }`, including IDs, colors, sizes and URLs. |

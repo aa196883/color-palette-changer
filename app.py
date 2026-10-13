@@ -11,6 +11,7 @@ from PIL import Image, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 
 from image_processing import create_image_mapping, map_image_with_palette
+from openapi import openapi_document
 from palette_generation import generate_palette, generate_random_hex_color, normalize_hex_color
 from utils import load_palette_json, save_palette_outputs
 
@@ -86,6 +87,11 @@ def create_app(config=None):
     @app.get('/')
     def index():
         return render_template('index.html')
+
+    @app.get('/openapi.json')
+    @app.get('/api/openapi.json')
+    def openapi_spec():
+        return jsonify(openapi_document())
 
     @app.get('/api/palettes')
     def list_palettes():
